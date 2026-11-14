@@ -227,43 +227,40 @@ export const DashboardPage: React.FC = () => {
       {/* 🧠 مركز دعم اتخاذ القرارات الذكي (EXECUTIVE DECISION SUPPORT SYSTEM - DSS) */}
       {/* ========================================================================= */}
 
-      <div className="bg-gradient-to-br from-[#3D1834] via-[#582949] to-[#1F3A5F] rounded-3xl p-5 sm:p-6 text-white shadow-xl border border-[#00A8A8]/30 relative overflow-hidden">
-        {/* خلفية جمالية بهوية النظام */}
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-72 h-72 bg-[#00A8A8]/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-72 h-72 bg-amber-400/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="bg-gradient-to-br from-white via-teal-50/25 to-slate-50/70 rounded-3xl p-5 sm:p-6 text-slate-800 shadow-sm border border-teal-200/70 relative overflow-hidden">
+        {/* شريط علوي متدرج مضيء */}
+        <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#00A8A8] via-emerald-400 to-amber-400" />
 
         {/* رأس قسم دعم القرار */}
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-5">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/80 pb-4 pt-1">
           <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-teal-400 to-indigo-500 p-0.5 shadow-lg flex items-center justify-center">
-              <div className="w-full h-full bg-slate-900 rounded-[14px] flex items-center justify-center">
-                <BrainCircuit className="text-teal-400" size={24} />
-              </div>
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#00A8A8] to-teal-600 text-white shadow-md shadow-teal-500/20 flex items-center justify-center shrink-0">
+              <BrainCircuit size={22} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-black tracking-wide text-white">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-black tracking-wide text-slate-900">
                   مركز دعم اتخاذ القرار (Executive Decision Hub)
                 </h2>
-                <span className="flex items-center gap-1 text-[10px] font-bold bg-teal-400/20 text-teal-300 px-2.5 py-0.5 rounded-full border border-teal-400/30">
+                <span className="flex items-center gap-1 text-[10px] font-bold bg-teal-50 text-[#00A8A8] px-2.5 py-0.5 rounded-full border border-teal-200">
                   <Sparkles size={11} />
                   محرك التحليل الاستباقي (DSS)
                 </span>
               </div>
-              <p className="text-xs text-slate-300 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 توصيات تشغيلية مدعومة رياضياً لحماية الأرباح، تسريع دورة المخزون، وتحرير رأس المال المجمد
               </p>
             </div>
           </div>
 
           {/* تبويبات قرارات الـ DSS */}
-          <div className="flex items-center bg-white/5 p-1 rounded-2xl border border-white/10 backdrop-blur-sm">
+          <div className="flex flex-wrap items-center gap-1 bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80">
             <button
               onClick={() => setActiveDssTab('REORDER')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                 activeDssTab === 'REORDER'
-                  ? 'bg-teal-500 text-slate-900 shadow-md'
-                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+                  ? 'bg-[#00A8A8] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white'
               }`}
             >
               <Zap size={14} />
@@ -277,10 +274,10 @@ export const DashboardPage: React.FC = () => {
 
             <button
               onClick={() => setActiveDssTab('EXPIRY')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                 activeDssTab === 'EXPIRY'
-                  ? 'bg-amber-400 text-slate-900 shadow-md'
-                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+                  ? 'bg-amber-500 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white'
               }`}
             >
               <TrendingDown size={14} />
@@ -294,16 +291,16 @@ export const DashboardPage: React.FC = () => {
 
             <button
               onClick={() => setActiveDssTab('DEAD_STOCK')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                 activeDssTab === 'DEAD_STOCK'
-                  ? 'bg-purple-400 text-slate-900 shadow-md'
-                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+                  ? 'bg-violet-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white'
               }`}
             >
               <Layers size={14} />
               <span>رأس المال المجمد (الراكد)</span>
               {dssData?.executiveSummary?.deadItemsCount ? (
-                <span className="bg-purple-600 text-white text-[10px] font-mono px-1.5 py-0.2 rounded-full">
+                <span className="bg-violet-700 text-white text-[10px] font-mono px-1.5 py-0.2 rounded-full">
                   {dssData.executiveSummary.deadItemsCount}
                 </span>
               ) : null}
@@ -311,85 +308,109 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* كروت المؤشرات الاستراتيجية للـ DSS */}
+        {/* كروت المؤشرات الاستراتيجية للـ DSS بألوان فاتحة مريحة كالبطاقات */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-5 relative z-10">
           {/* كارت 1: مخاطر النفاد والشراء */}
-          <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4 hover:border-teal-500/40 transition">
-            <div className="flex items-center justify-between text-teal-400 mb-1">
-              <span className="text-xs font-bold">أصناف مهددة بالنفاد (قبل 7 أيام)</span>
-              <Zap size={16} />
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveDssTab('REORDER')}
+            className="relative overflow-hidden bg-gradient-to-br from-white via-teal-50/40 to-emerald-50/70 border border-teal-200/80 rounded-2xl p-4 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer"
+          >
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#00A8A8] to-emerald-500" />
+            <div className="flex items-center justify-between text-teal-800 mb-1.5">
+              <span className="text-xs font-black">أصناف مهددة بالنفاد (قبل 7 أيام)</span>
+              <div className="p-1.5 rounded-xl bg-teal-500/15 text-[#00A8A8]">
+                <Zap size={16} />
+              </div>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black font-mono text-white">
+              <span className="text-2xl font-black font-mono text-slate-900">
                 {dssData?.executiveSummary?.urgentReorders || 0}
               </span>
-              <span className="text-xs text-slate-300">أصناف تتطلب أمر شراء استباقي</span>
+              <span className="text-xs font-semibold text-slate-600">أصناف تتطلب أمر شراء استباقي</span>
             </div>
-            <p className="text-[11px] text-teal-300/80 mt-2 font-medium">
+            <p className="text-[11px] text-teal-700 mt-2 font-medium">
               محسوبة بناءً على سرعة الاستهلاك الفعلي آخر 30 يوماً
             </p>
           </div>
 
           {/* كارت 2: قيمة الخسارة المحتملة من الانتهاء */}
-          <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4 hover:border-amber-400/40 transition">
-            <div className="flex items-center justify-between text-amber-400 mb-1">
-              <span className="text-xs font-bold">الخسارة المالية المهددة بالتلف</span>
-              <TrendingDown size={16} />
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveDssTab('EXPIRY')}
+            className="relative overflow-hidden bg-gradient-to-br from-white via-amber-50/40 to-orange-50/70 border border-amber-200/80 rounded-2xl p-4 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer"
+          >
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-400 to-orange-500" />
+            <div className="flex items-center justify-between text-amber-900 mb-1.5">
+              <span className="text-xs font-black">الخسارة المالية المهددة بالتلف</span>
+              <div className="p-1.5 rounded-xl bg-amber-500/15 text-amber-600">
+                <TrendingDown size={16} />
+              </div>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black font-mono text-amber-300">
+              <span className="text-2xl font-black font-mono text-amber-700">
                 {(dssData?.executiveSummary?.totalPotentialLoss || 0).toLocaleString()}
               </span>
-              <span className="text-xs text-slate-300">ج.م (قيمة تكلفة)</span>
+              <span className="text-xs font-semibold text-slate-600">ج.س (قيمة تكلفة)</span>
             </div>
-            <p className="text-[11px] text-amber-200/80 mt-2 font-medium">
+            <p className="text-[11px] text-amber-800 mt-2 font-medium">
               تصفيتها فوراً بالخصومات المقترحة ينقذ السيولة قبل انتهاء الصلاحية
             </p>
           </div>
 
           {/* كارت 3: رأس المال المجمد في البضاعة الراكدة */}
-          <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4 hover:border-purple-400/40 transition">
-            <div className="flex items-center justify-between text-purple-300 mb-1">
-              <span className="text-xs font-bold">رأس المال المجمد (بدون حركة 60 يوم)</span>
-              <Layers size={16} />
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveDssTab('DEAD_STOCK')}
+            className="relative overflow-hidden bg-gradient-to-br from-white via-violet-50/40 to-purple-50/70 border border-violet-200/80 rounded-2xl p-4 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer"
+          >
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 to-purple-500" />
+            <div className="flex items-center justify-between text-violet-900 mb-1.5">
+              <span className="text-xs font-black">رأس المال المجمد (بدون حركة 60 يوم)</span>
+              <div className="p-1.5 rounded-xl bg-violet-500/15 text-violet-600">
+                <Layers size={16} />
+              </div>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black font-mono text-purple-200">
+              <span className="text-2xl font-black font-mono text-violet-700">
                 {(dssData?.executiveSummary?.totalFrozenCapital || 0).toLocaleString()}
               </span>
-              <span className="text-xs text-slate-300">ج.م مجمدة بالمخازن</span>
+              <span className="text-xs font-semibold text-slate-600">ج.س مجمدة بالمخازن</span>
             </div>
-            <p className="text-[11px] text-purple-200/80 mt-2 font-medium">
+            <p className="text-[11px] text-violet-800 mt-2 font-medium">
               يوصى بعمل عروض مجمعة (Bundling) لتحرير السيولة فوراً
             </p>
           </div>
         </div>
 
-        {/* تفاصيل التوصيات التفاعلية بناءً على التبويب المختار */}
-        <div className="relative z-10 bg-slate-900/80 rounded-2xl border border-white/10 overflow-hidden">
+        {/* تفاصيل التوصيات التفاعلية بناءً على التبويب المختار (بخلفية بيضاء نظيفة) */}
+        <div className="relative z-10 bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
           {isDssLoading ? (
-            <div className="p-8 text-center text-slate-400 text-xs">
+            <div className="p-8 text-center text-slate-500 text-xs font-semibold">
               جاري تشغيل خوارزميات محرك دعم القرارات ومسح المبيعات التاريخية...
             </div>
           ) : activeDssTab === 'REORDER' ? (
             <div className="p-4">
-              <div className="flex items-center justify-between mb-3 text-xs">
-                <span className="font-bold text-teal-300">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3 text-xs">
+                <span className="font-black text-[#00A8A8]">
                   ⚡ جدول التوصيات الذكية لإعادة الطلب وتفادي نفاد الأصناف:
                 </span>
-                <span className="text-slate-400 text-[11px]">
+                <span className="text-slate-500 text-[11px] font-medium">
                   معدل التغطية المستهدف: 30 يوماً قادمة
                 </span>
               </div>
               {dssData?.reorderRecommendations?.length === 0 ? (
-                <div className="p-6 text-center text-slate-400 text-xs">
+                <div className="p-6 text-center text-slate-500 text-xs font-medium bg-slate-50/60 rounded-xl">
                   كافة الأصناف لديها تغطية مخزنية كافية ولا توجد مخاطر نفاد وشيكة.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-right text-xs">
                     <thead>
-                      <tr className="border-b border-white/10 text-slate-400 text-[11px]">
+                      <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-600 text-[11px] font-bold">
                         <th className="py-2.5 px-3">الصنف</th>
                         <th className="py-2.5 px-3">المخزون الحالي</th>
                         <th className="py-2.5 px-3">البيع اليومي (Velocity)</th>
@@ -400,63 +421,63 @@ export const DashboardPage: React.FC = () => {
                         <th className="py-2.5 px-3">التوصية والقرار الفوري</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody className="divide-y divide-slate-100">
                       {dssData?.reorderRecommendations.map((rec) => (
-                        <tr key={rec.medicineId} className="hover:bg-white/5 transition">
+                        <tr key={rec.medicineId} className="hover:bg-teal-50/30 transition">
                           <td className="py-3 px-3">
-                            <div className="font-bold text-white">{rec.name}</div>
+                            <div className="font-bold text-slate-900">{rec.name}</div>
                             <span className="text-[10px] text-slate-400 font-mono">{rec.code}</span>
                           </td>
                           <td className="py-3 px-3">
                             <span
                               className={`font-mono font-bold ${
                                 rec.currentStock === 0
-                                  ? 'text-rose-400'
+                                  ? 'text-rose-600'
                                   : rec.currentStock <= rec.minStockLevel
-                                  ? 'text-amber-400'
-                                  : 'text-slate-200'
+                                  ? 'text-amber-600'
+                                  : 'text-slate-700'
                               }`}
                             >
                               {rec.currentStock} وحدة
                             </span>
                           </td>
-                          <td className="py-3 px-3 font-mono text-teal-300">
+                          <td className="py-3 px-3 font-mono font-bold text-[#00A8A8]">
                             {rec.dailyVelocity} / يوم
                           </td>
                           <td className="py-3 px-3">
                             <span
                               className={`px-2 py-0.5 rounded-md font-mono text-[11px] font-bold ${
                                 rec.daysRemaining <= 3
-                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
                               }`}
                             >
                               {rec.daysRemaining === 0 ? 'نافد الآن!' : `${rec.daysRemaining} يوم`}
                             </span>
                           </td>
-                          <td className="py-3 px-3 font-mono font-bold text-emerald-400">
+                          <td className="py-3 px-3 font-mono font-bold text-emerald-600">
                             +{rec.suggestedOrderQty} وحدة
                           </td>
-                          <td className="py-3 px-3 font-mono text-slate-300">
-                            {rec.estimatedBudget.toLocaleString()} ج.م
+                          <td className="py-3 px-3 font-mono font-semibold text-slate-700">
+                            {rec.estimatedBudget.toLocaleString()} ج.س
                           </td>
                           <td className="py-3 px-3">
                             {rec.bestSupplier ? (
                               <div>
-                                <div className="text-white font-medium">{rec.bestSupplier.name}</div>
-                                <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                                <div className="text-slate-800 font-bold">{rec.bestSupplier.name}</div>
+                                <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
                                   <PhoneCall size={10} />
                                   {rec.bestSupplier.phone}
                                 </div>
                               </div>
                             ) : (
-                              <span className="text-slate-500 text-[11px]">مورد جديد</span>
+                              <span className="text-slate-400 text-[11px]">مورد جديد</span>
                             )}
                           </td>
                           <td className="py-3 px-3">
                             <a
                               href={`/purchasing/orders?medicineId=${rec.medicineId}&qty=${rec.suggestedOrderQty}`}
-                              className="inline-flex items-center gap-1.5 bg-teal-500 hover:bg-teal-400 text-slate-900 font-bold px-3 py-1.5 rounded-xl text-[11px] transition shadow-md"
+                              className="inline-flex items-center gap-1.5 bg-[#00A8A8] hover:bg-[#009292] text-white font-bold px-3 py-1.5 rounded-xl text-[11px] transition shadow-xs"
                             >
                               <span>إنشاء أمر شراء فوري</span>
                               <ArrowRight size={12} />
@@ -471,23 +492,23 @@ export const DashboardPage: React.FC = () => {
             </div>
           ) : activeDssTab === 'EXPIRY' ? (
             <div className="p-4">
-              <div className="flex items-center justify-between mb-3 text-xs">
-                <span className="font-bold text-amber-300">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3 text-xs">
+                <span className="font-black text-amber-700">
                   ⏳ مستشار تصفية الصلاحيات والخصومات المقترحة لتفادي الهدر:
                 </span>
-                <span className="text-slate-400 text-[11px]">
+                <span className="text-slate-500 text-[11px] font-medium">
                   أصناف قاربت على الانتهاء خلال الـ 90 يوماً القادمة
                 </span>
               </div>
               {dssData?.expiryRiskRecommendations?.length === 0 ? (
-                <div className="p-6 text-center text-slate-400 text-xs">
+                <div className="p-6 text-center text-slate-500 text-xs font-medium bg-slate-50/60 rounded-xl">
                   لا توجد دفعات قريبة الانتهاء مهددة بالخسارة حالياً.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-right text-xs">
                     <thead>
-                      <tr className="border-b border-white/10 text-slate-400 text-[11px]">
+                      <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-600 text-[11px] font-bold">
                         <th className="py-2.5 px-3">الصنف والتشغيلة</th>
                         <th className="py-2.5 px-3">الرصيد المتاح</th>
                         <th className="py-2.5 px-3">أيام الصلاحية</th>
@@ -498,51 +519,51 @@ export const DashboardPage: React.FC = () => {
                         <th className="py-2.5 px-3">القرار الموصى به</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody className="divide-y divide-slate-100">
                       {dssData?.expiryRiskRecommendations.map((exp) => (
-                        <tr key={exp.batchId} className="hover:bg-white/5 transition">
+                        <tr key={exp.batchId} className="hover:bg-amber-50/30 transition">
                           <td className="py-3 px-3">
-                            <div className="font-bold text-white">{exp.tradeName}</div>
-                            <span className="text-[10px] text-amber-400 font-mono">
+                            <div className="font-bold text-slate-900">{exp.tradeName}</div>
+                            <span className="text-[10px] text-amber-700 font-mono">
                               تشغيلة: {exp.batchNumber}
                             </span>
                           </td>
-                          <td className="py-3 px-3 font-mono text-slate-200">{exp.quantity}</td>
+                          <td className="py-3 px-3 font-mono font-bold text-slate-700">{exp.quantity}</td>
                           <td className="py-3 px-3">
                             <span
                               className={`px-2 py-0.5 rounded-md font-mono text-[11px] font-bold ${
                                 exp.daysToExpiry <= 30
-                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
                               }`}
                             >
                               {exp.daysToExpiry} يوم متبقي
                             </span>
                           </td>
-                          <td className="py-3 px-3 font-mono text-slate-400">
+                          <td className="py-3 px-3 font-mono text-slate-600">
                             {exp.projectedSalesUntilExpiry} وحدة
                           </td>
-                          <td className="py-3 px-3 font-mono font-bold text-rose-400">
+                          <td className="py-3 px-3 font-mono font-bold text-rose-600">
                             {exp.unsoldRiskQty} وحدة
                           </td>
-                          <td className="py-3 px-3 font-mono font-bold text-rose-300">
-                            {exp.potentialLoss.toLocaleString()} ج.م
+                          <td className="py-3 px-3 font-mono font-bold text-rose-700">
+                            {exp.potentialLoss.toLocaleString()} ج.س
                           </td>
                           <td className="py-3 px-3">
                             <div className="flex items-center gap-1.5 font-bold">
                               <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full font-mono">
                                 -{exp.suggestedMarkdownPercent}%
                               </span>
-                              <span className="line-through text-slate-500 text-[10px] font-mono">
+                              <span className="line-through text-slate-400 text-[10px] font-mono">
                                 {exp.salePrice}
                               </span>
-                              <span className="text-emerald-400 font-mono text-xs">
-                                {exp.suggestedSalePrice} ج.م
+                              <span className="text-emerald-600 font-mono text-xs">
+                                {exp.suggestedSalePrice} ج.س
                               </span>
                             </div>
                           </td>
                           <td className="py-3 px-3">
-                            <div className="text-[11px] text-slate-300 max-w-xs leading-relaxed">
+                            <div className="text-[11px] text-slate-600 max-w-xs leading-relaxed">
                               {exp.decisionPrompt}
                             </div>
                           </td>
@@ -555,23 +576,23 @@ export const DashboardPage: React.FC = () => {
             </div>
           ) : (
             <div className="p-4">
-              <div className="flex items-center justify-between mb-3 text-xs">
-                <span className="font-bold text-purple-300">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3 text-xs">
+                <span className="font-black text-violet-700">
                   🧊 تحليل رأس المال المجمد في البضاعة الراكدة (Dead Stock):
                 </span>
-                <span className="text-slate-400 text-[11px]">
+                <span className="text-slate-500 text-[11px] font-medium">
                   أصناف يتوفر لها مخزون ولم تسجل أي حركة بيع خلال آخر 60 يوماً
                 </span>
               </div>
               {dssData?.deadStockRecommendations?.length === 0 ? (
-                <div className="p-6 text-center text-slate-400 text-xs">
+                <div className="p-6 text-center text-slate-500 text-xs font-medium bg-slate-50/60 rounded-xl">
                   المخزون متداول بشكل صحي ولا توجد بضائع راكدة مجمدة لرأس المال.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-right text-xs">
                     <thead>
-                      <tr className="border-b border-white/10 text-slate-400 text-[11px]">
+                      <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-600 text-[11px] font-bold">
                         <th className="py-2.5 px-3">الصنف</th>
                         <th className="py-2.5 px-3">الرصيد الراكد</th>
                         <th className="py-2.5 px-3">متوسط التكلفة</th>
@@ -580,29 +601,29 @@ export const DashboardPage: React.FC = () => {
                         <th className="py-2.5 px-3">القرار الإداري المقترح</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody className="divide-y divide-slate-100">
                       {dssData?.deadStockRecommendations.map((dead) => (
-                        <tr key={dead.medicineId} className="hover:bg-white/5 transition">
+                        <tr key={dead.medicineId} className="hover:bg-violet-50/30 transition">
                           <td className="py-3 px-3">
-                            <div className="font-bold text-white">{dead.name}</div>
+                            <div className="font-bold text-slate-900">{dead.name}</div>
                             <span className="text-[10px] text-slate-400 font-mono">{dead.code}</span>
                           </td>
-                          <td className="py-3 px-3 font-mono text-purple-200 font-bold">
+                          <td className="py-3 px-3 font-mono text-violet-700 font-bold">
                             {dead.currentStock} وحدة
                           </td>
-                          <td className="py-3 px-3 font-mono text-slate-400">
-                            {dead.avgCost} ج.م
+                          <td className="py-3 px-3 font-mono text-slate-600">
+                            {dead.avgCost} ج.س
                           </td>
-                          <td className="py-3 px-3 font-mono font-bold text-purple-300">
-                            {dead.frozenCapital.toLocaleString()} ج.م
+                          <td className="py-3 px-3 font-mono font-bold text-violet-700">
+                            {dead.frozenCapital.toLocaleString()} ج.س
                           </td>
                           <td className="py-3 px-3">
-                            <span className="bg-purple-900/60 border border-purple-500/30 text-purple-200 text-[10px] px-2 py-0.5 rounded-md font-mono font-bold">
+                            <span className="bg-violet-50 border border-violet-200 text-violet-700 text-[10px] px-2 py-0.5 rounded-md font-mono font-bold">
                               أكثر من {dead.daysWithoutSales} يوم
                             </span>
                           </td>
                           <td className="py-3 px-3">
-                            <div className="text-[11px] text-slate-300 max-w-sm leading-relaxed">
+                            <div className="text-[11px] text-slate-600 max-w-sm leading-relaxed">
                               {dead.suggestedAction}
                             </div>
                           </td>
@@ -661,24 +682,24 @@ export const DashboardPage: React.FC = () => {
               tabIndex={0}
               onClick={() => navigate('/reports/daily-sales')}
               onKeyDown={(e) => e.key === 'Enter' && navigate('/reports/daily-sales')}
-              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-emerald-50/40 to-teal-50/70 border border-emerald-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-emerald-50/30 to-emerald-50/70 border border-emerald-200/80 shadow-2xs hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
             >
-              <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-emerald-500 to-[#00A8A8]" />
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 to-teal-500" />
               <div>
-                <div className="flex items-center justify-between text-emerald-800 mb-2.5 mt-0.5">
+                <div className="flex items-center justify-between text-emerald-700 mb-2 mt-0.5">
                   <span className="text-xs font-black">مبيعات اليوم</span>
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-500 to-[#00A8A8] text-white shadow-md shadow-emerald-500/20 group-hover:scale-110 transition-transform">
+                  <div className="p-2 rounded-xl bg-emerald-100/80 text-emerald-600 group-hover:scale-110 transition-transform">
                     <TrendingUp size={16} />
                   </div>
                 </div>
-                <p className="text-xl font-black text-slate-900 font-mono tracking-tight">
+                <p className="text-xl font-black text-slate-800 font-mono tracking-tight">
                   {data.summary.salesToday.toLocaleString()}{' '}
                   <span className="text-[10px] font-bold text-slate-500">ج.س</span>
                 </p>
               </div>
               <div className="mt-3 pt-2 border-t border-emerald-200/60 flex items-center justify-between text-[10px] font-bold text-emerald-700">
                 <span>{data.summary.invoicesCount} فاتورة مصدرة</span>
-                <span className="inline-flex items-center gap-0.5 text-[#00A8A8] group-hover:translate-x-[-2px] transition-transform">
+                <span className="inline-flex items-center gap-0.5 text-emerald-600 group-hover:translate-x-[-2px] transition-transform">
                   <span>تقرير اليوم</span>
                   <ArrowUpRight size={12} />
                 </span>
@@ -691,22 +712,22 @@ export const DashboardPage: React.FC = () => {
               tabIndex={0}
               onClick={() => navigate('/sales/invoices')}
               onKeyDown={(e) => e.key === 'Enter' && navigate('/sales/invoices')}
-              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-teal-50/40 to-cyan-50/70 border border-teal-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-teal-50/30 to-cyan-50/70 border border-teal-200/80 shadow-2xs hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
             >
-              <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#00A8A8] to-[#1F3A5F]" />
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#00A8A8] to-cyan-500" />
               <div>
-                <div className="flex items-center justify-between text-[#1F3A5F] mb-2.5 mt-0.5">
+                <div className="flex items-center justify-between text-[#00A8A8] mb-2 mt-0.5">
                   <span className="text-xs font-black">مبيعات الشهر</span>
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-[#00A8A8] to-[#1F3A5F] text-white shadow-md shadow-teal-600/20 group-hover:scale-110 transition-transform">
+                  <div className="p-2 rounded-xl bg-teal-100/80 text-[#00A8A8] group-hover:scale-110 transition-transform">
                     <ShoppingBag size={16} />
                   </div>
                 </div>
-                <p className="text-xl font-black text-slate-900 font-mono tracking-tight">
+                <p className="text-xl font-black text-slate-800 font-mono tracking-tight">
                   {data.summary.salesMonth.toLocaleString()}{' '}
                   <span className="text-[10px] font-bold text-slate-500">ج.س</span>
                 </p>
               </div>
-              <div className="mt-3 pt-2 border-t border-teal-200/60 flex items-center justify-between text-[10px] font-bold text-teal-800">
+              <div className="mt-3 pt-2 border-t border-teal-200/60 flex items-center justify-between text-[10px] font-bold text-teal-700">
                 <span>إجمالي الشهر</span>
                 <span className="inline-flex items-center gap-0.5 text-[#00A8A8] group-hover:translate-x-[-2px] transition-transform">
                   <span>سجل الفواتير</span>
@@ -721,24 +742,24 @@ export const DashboardPage: React.FC = () => {
               tabIndex={0}
               onClick={() => navigate('/expenses')}
               onKeyDown={(e) => e.key === 'Enter' && navigate('/expenses')}
-              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-rose-50/40 to-pink-50/70 border border-rose-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-rose-50/30 to-pink-50/60 border border-rose-200/80 shadow-2xs hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
             >
-              <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-rose-500 to-[#582949]" />
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-rose-400 to-pink-500" />
               <div>
-                <div className="flex items-center justify-between text-rose-800 mb-2.5 mt-0.5">
+                <div className="flex items-center justify-between text-rose-600 mb-2 mt-0.5">
                   <span className="text-xs font-black">مصروفات اليوم</span>
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-rose-500 to-[#582949] text-white shadow-md shadow-rose-500/20 group-hover:scale-110 transition-transform">
+                  <div className="p-2 rounded-xl bg-rose-100/80 text-rose-600 group-hover:scale-110 transition-transform">
                     <Wallet size={16} />
                   </div>
                 </div>
-                <p className="text-xl font-black text-slate-900 font-mono tracking-tight">
+                <p className="text-xl font-black text-slate-800 font-mono tracking-tight">
                   {(data.summary.expensesToday || 0).toLocaleString()}{' '}
                   <span className="text-[10px] font-bold text-slate-500">ج.س</span>
                 </p>
               </div>
-              <div className="mt-3 pt-2 border-t border-rose-200/60 flex items-center justify-between text-[10px] font-bold text-rose-700">
+              <div className="mt-3 pt-2 border-t border-rose-200/60 flex items-center justify-between text-[10px] font-bold text-rose-600">
                 <span>سندات صرف معتمدة</span>
-                <span className="inline-flex items-center gap-0.5 text-[#582949] group-hover:translate-x-[-2px] transition-transform">
+                <span className="inline-flex items-center gap-0.5 text-rose-600 group-hover:translate-x-[-2px] transition-transform">
                   <span>سندات الصرف</span>
                   <ArrowUpRight size={12} />
                 </span>
@@ -751,26 +772,26 @@ export const DashboardPage: React.FC = () => {
               tabIndex={0}
               onClick={() => navigate('/shifts')}
               onKeyDown={(e) => e.key === 'Enter' && navigate('/shifts')}
-              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-indigo-50/40 to-slate-100/80 border border-indigo-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-indigo-50/30 to-sky-50/60 border border-indigo-200/80 shadow-2xs hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
             >
-              <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#1F3A5F] to-indigo-600" />
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-400 to-sky-500" />
               <div>
-                <div className="flex items-center justify-between text-[#1F3A5F] mb-2.5 mt-0.5">
+                <div className="flex items-center justify-between text-indigo-600 mb-2 mt-0.5">
                   <span className="text-xs font-black">الوردية النشطة</span>
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-[#1F3A5F] to-indigo-600 text-white shadow-md shadow-indigo-500/20 group-hover:scale-110 transition-transform">
+                  <div className="p-2 rounded-xl bg-indigo-100/80 text-indigo-600 group-hover:scale-110 transition-transform">
                     <Clock size={16} />
                   </div>
                 </div>
-                <p className="text-sm font-black text-slate-900 truncate">
+                <p className="text-sm font-black text-slate-800 truncate">
                   {data.activeShift ? data.activeShift.cashier : 'مغلقة حالياً'}
                 </p>
-                <p className="text-[10px] text-indigo-700 mt-1 font-mono font-bold truncate">
+                <p className="text-[10px] text-indigo-600 mt-1 font-mono font-bold truncate">
                   {data.activeShift
                     ? `وردية #${data.activeShift.shiftNumber} (${data.activeShift.expectedCash.toLocaleString()} ج.س)`
                     : 'لا توجد وردية مفتوحة'}
                 </p>
               </div>
-              <div className="mt-2.5 pt-2 border-t border-indigo-200/60 flex items-center justify-between text-[10px] font-bold text-[#1F3A5F]">
+              <div className="mt-2.5 pt-2 border-t border-indigo-200/60 flex items-center justify-between text-[10px] font-bold text-indigo-600">
                 <span>حركة الصندوق</span>
                 <span className="inline-flex items-center gap-0.5 text-indigo-600 group-hover:translate-x-[-2px] transition-transform">
                   <span>إدارة الورديات</span>
@@ -785,24 +806,24 @@ export const DashboardPage: React.FC = () => {
               tabIndex={0}
               onClick={() => navigate('/customers')}
               onKeyDown={(e) => e.key === 'Enter' && navigate('/customers')}
-              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-amber-50/50 to-orange-50/70 border border-amber-200/90 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-amber-50/35 to-orange-50/60 border border-amber-200/80 shadow-2xs hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
             >
-              <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#B8892B] to-amber-500" />
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-400 to-orange-500" />
               <div>
-                <div className="flex items-center justify-between text-amber-900 mb-2.5 mt-0.5">
+                <div className="flex items-center justify-between text-amber-700 mb-2 mt-0.5">
                   <span className="text-xs font-black">ديون العملاء (AR)</span>
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-[#B8892B] to-amber-500 text-white shadow-md shadow-amber-500/20 group-hover:scale-110 transition-transform">
+                  <div className="p-2 rounded-xl bg-amber-100/80 text-amber-600 group-hover:scale-110 transition-transform">
                     <Users size={16} />
                   </div>
                 </div>
-                <p className="text-xl font-black text-slate-900 font-mono tracking-tight">
+                <p className="text-xl font-black text-slate-800 font-mono tracking-tight">
                   {data.summary.totalCustomerDebt.toLocaleString()}{' '}
                   <span className="text-[10px] font-bold text-slate-500">ج.س</span>
                 </p>
               </div>
-              <div className="mt-3 pt-2 border-t border-amber-200/70 flex items-center justify-between text-[10px] font-bold text-amber-800">
+              <div className="mt-3 pt-2 border-t border-amber-200/60 flex items-center justify-between text-[10px] font-bold text-amber-700">
                 <span>ذمم مدينة آجلة</span>
-                <span className="inline-flex items-center gap-0.5 text-[#B8892B] group-hover:translate-x-[-2px] transition-transform">
+                <span className="inline-flex items-center gap-0.5 text-amber-600 group-hover:translate-x-[-2px] transition-transform">
                   <span>كشوف العملاء</span>
                   <ArrowUpRight size={12} />
                 </span>
@@ -815,24 +836,24 @@ export const DashboardPage: React.FC = () => {
               tabIndex={0}
               onClick={() => navigate('/suppliers')}
               onKeyDown={(e) => e.key === 'Enter' && navigate('/suppliers')}
-              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-fuchsia-50/40 to-purple-50/70 border border-purple-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-purple-50/30 to-violet-50/60 border border-purple-200/80 shadow-2xs hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
             >
-              <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#582949] to-purple-600" />
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-purple-400 to-violet-500" />
               <div>
-                <div className="flex items-center justify-between text-[#582949] mb-2.5 mt-0.5">
+                <div className="flex items-center justify-between text-purple-700 mb-2 mt-0.5">
                   <span className="text-xs font-black">مستحقات الموردين (AP)</span>
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-[#582949] to-purple-600 text-white shadow-md shadow-purple-500/20 group-hover:scale-110 transition-transform">
+                  <div className="p-2 rounded-xl bg-purple-100/80 text-purple-600 group-hover:scale-110 transition-transform">
                     <Truck size={16} />
                   </div>
                 </div>
-                <p className="text-xl font-black text-slate-900 font-mono tracking-tight">
+                <p className="text-xl font-black text-slate-800 font-mono tracking-tight">
                   {data.summary.totalSupplierDebt.toLocaleString()}{' '}
                   <span className="text-[10px] font-bold text-slate-500">ج.س</span>
                 </p>
               </div>
-              <div className="mt-3 pt-2 border-t border-purple-200/60 flex items-center justify-between text-[10px] font-bold text-[#582949]">
+              <div className="mt-3 pt-2 border-t border-purple-200/60 flex items-center justify-between text-[10px] font-bold text-purple-700">
                 <span>ذمم دائنة للموردين</span>
-                <span className="inline-flex items-center gap-0.5 text-purple-700 group-hover:translate-x-[-2px] transition-transform">
+                <span className="inline-flex items-center gap-0.5 text-purple-600 group-hover:translate-x-[-2px] transition-transform">
                   <span>حسابات الموردين</span>
                   <ArrowUpRight size={12} />
                 </span>
@@ -843,10 +864,10 @@ export const DashboardPage: React.FC = () => {
           {/* ===== 2. الرسوم البيانية والمؤشرات المرئية ===== */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* مخطط حركة مبيعات الأسبوع */}
-            <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/90 p-5 shadow-sm hover:shadow-md transition">
+            <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs hover:shadow-md transition">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                 <div>
-                  <h3 className="text-xs font-black text-[#1F3A5F]">
+                  <h3 className="text-xs font-black text-slate-800">
                     حركة المبيعات لآخر 7 أيام (Daily Sales Trend)
                   </h3>
                   <p className="text-[11px] text-slate-400">تتبع حجم المبيعات اليومية بالجنيه السوداني</p>
@@ -855,12 +876,12 @@ export const DashboardPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => navigate('/reports/daily-sales')}
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-[#00A8A8] hover:text-[#582949] bg-teal-50/80 hover:bg-teal-100/80 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-[#00A8A8] hover:text-teal-700 bg-teal-50 hover:bg-teal-100/80 px-2.5 py-1 rounded-lg transition cursor-pointer"
                   >
                     <span>تقرير المبيعات التفصيلي</span>
                     <ArrowUpRight size={12} />
                   </button>
-                  <span className="text-xs font-mono font-bold text-white bg-gradient-to-r from-[#582949] to-[#00A8A8] px-2.5 py-1 rounded-lg shadow-2xs">
+                  <span className="text-xs font-mono font-bold text-[#00A8A8] bg-teal-50 border border-teal-200 px-2.5 py-1 rounded-lg">
                     7 أيام
                   </span>
                 </div>
