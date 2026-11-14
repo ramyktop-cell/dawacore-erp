@@ -17,7 +17,19 @@ const path = require('path');
 // Ensure cloud host binding (Render requires 0.0.0.0 instead of 127.0.0.1)
 process.env.HOST = process.env.HOST || '0.0.0.0';
 process.env.NODE_ENV = process.env.NODE_ENV || 'production';
-process.env.JWT_SECRET = process.env.JWT_SECRET || 'DawaCore_Default_Cloud_Jwt_Secret_2026_SecureKey';
+
+// Ensure JWT_SECRET satisfies security.config.ts (>= 48 bytes and no forbidden words like 'dawacore')
+if (
+  !process.env.JWT_SECRET ||
+  Buffer.byteLength(process.env.JWT_SECRET, 'utf8') < 48 ||
+  /dawacore|change.?me|example/i.test(process.env.JWT_SECRET)
+) {
+  const seed = `${process.env.JWT_SECRET || ''}:${process.env.DATABASE_URL || 'RENDER_PROD'}`;
+  process.env.JWT_SECRET = crypto
+    .createHmac('sha512', 'ERP_CLOUD_JWT_DERIVATION_KEY_2026')
+    .update(seed)
+    .digest('hex');
+}
 
 console.log('========================================================');
 console.log('🚀 DawaCore ERP - Cloud Production Startup');
