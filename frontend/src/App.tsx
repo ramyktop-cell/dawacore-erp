@@ -48,6 +48,12 @@ import { getCurrentUser, getUserRole } from './utils/permissions';
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = React.useState(false);
+
+  // إغلاق القائمة الجانبية تلقائياً على الجوال/التابلت عند الانتقال لصفحة جديدة
+  useEffect(() => {
+    setIsMobileSidebarOpen(false);
+  }, [location.pathname]);
 
   // اختصار عالمي لفتح شاشة البيع F4 من أي شاشة في النظام
   useEffect(() => {
@@ -62,8 +68,36 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   }, [location.pathname, navigate]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#F4F6F8]" dir="rtl">
-      <AppSidebar />
+    <div className="flex flex-col lg:flex-row h-screen w-screen overflow-hidden bg-[#F4F6F8]" dir="rtl">
+      {/* شريط علوي مدمج للهواتف والتابلت لفتح القائمة الجانبية */}
+      <div className="flex lg:hidden items-center justify-between bg-[#582949] text-white px-4 py-2.5 shadow-md shrink-0 z-30">
+        <button
+          type="button"
+          onClick={() => setIsMobileSidebarOpen(true)}
+          className="flex items-center gap-2 rounded-lg bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-bold transition"
+          aria-label="فتح القائمة"
+        >
+          <span className="text-base leading-none">☰</span>
+          <span>القائمة</span>
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="font-black text-sm tracking-wide">DawaCore ERP</span>
+          <img src="/logo.png" alt="Logo" className="w-7 h-7 rounded-lg object-cover border border-white/20" />
+        </div>
+      </div>
+
+      {/* خلفية معتمة عند فتح القائمة على الجوال أو التابلت */}
+      {isMobileSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-[1px] z-40 lg:hidden"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
+
+      <AppSidebar
+        mobileOpen={isMobileSidebarOpen}
+        onMobileClose={() => setIsMobileSidebarOpen(false)}
+      />
       <main className="flex-1 h-full overflow-y-auto overflow-x-hidden">
         {children}
       </main>

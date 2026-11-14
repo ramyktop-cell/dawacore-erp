@@ -19,7 +19,12 @@ interface MenuItem {
   subItems?: SubItem[];
 }
 
-export const AppSidebar: React.FC = () => {
+interface AppSidebarProps {
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+}
+
+export const AppSidebar: React.FC<AppSidebarProps> = ({ mobileOpen = false, onMobileClose }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [terms, setTerms] = useState<BusinessTerminology>(() => getBusinessTerminology());
   const userObj = getCurrentUser();
@@ -240,9 +245,9 @@ export const AppSidebar: React.FC = () => {
 
   return (
     <aside
-      className={`h-screen bg-[#582949] text-white flex flex-col transition-all duration-300 shadow-xl z-20 ${
-        isCollapsed ? 'w-20' : 'w-64'
-      }`}
+      className={`fixed lg:static inset-y-0 right-0 h-screen bg-[#582949] text-white flex flex-col transition-all duration-300 shadow-xl z-50 lg:z-20 ${
+        mobileOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'
+      } ${isCollapsed ? 'w-64 lg:w-20' : 'w-64'}`}
     >
       {/* Brand Header */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-white/10 bg-black/10">
@@ -275,13 +280,25 @@ export const AppSidebar: React.FC = () => {
           />
         )}
 
-        <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition text-xs"
-          title={isCollapsed ? 'توسيع القائمة' : 'طي القائمة'}
-        >
-          {isCollapsed ? '◀' : '▶'}
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="hidden lg:inline-flex p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition text-xs"
+            title={isCollapsed ? 'توسيع القائمة' : 'طي القائمة'}
+          >
+            {isCollapsed ? '◀' : '▶'}
+          </button>
+          {onMobileClose && (
+            <button
+              type="button"
+              onClick={onMobileClose}
+              className="lg:hidden p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition text-sm font-bold"
+              title="إغلاق القائمة"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Navigation Sections */}

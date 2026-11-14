@@ -87,13 +87,13 @@ export const DashboardPage: React.FC = () => {
   }, [data?.expenseChart]);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6" dir="rtl">
+    <div className="p-3 sm:p-6 max-w-7xl mx-auto space-y-5 sm:space-y-6" dir="rtl">
       {/* Header */}
       <PageHeader
         title="لوحة تحكم المدير ودعم القرار (DSS & Executive Dashboard)"
         subtitle="المتابعة الذكية للمبيعات، النواقص، قرارات التوريد والتصفية، والسيولة النقدية"
         action={
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-2xs">
               <Calendar size={15} className="text-slate-400" />
               <input

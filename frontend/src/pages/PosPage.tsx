@@ -906,7 +906,7 @@ export const PosPage: React.FC = () => {
   });
 
   return (
-    <div className="relative flex h-screen w-full flex-col bg-[#F4F6F8] font-sans text-slate-800 select-none" dir="rtl">
+    <div className="relative flex min-h-screen lg:h-screen w-full flex-col bg-[#F4F6F8] font-sans text-slate-800 select-none" dir="rtl">
       {/* 🛡️ شاشة القفل الأمني الكامل عند فتح الكونسول (DevTools Lockout Overlay) */}
       {isConsoleLocked && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/95 backdrop-blur-md p-6">
@@ -951,9 +951,9 @@ export const PosPage: React.FC = () => {
 
 
       {/* 1. الشريط العلوي البنفسجي العنابي (Top Header) */}
-      <header className="flex h-16 items-center justify-between bg-[#582949] px-6 text-white shadow-md">
+      <header className="flex flex-wrap min-h-16 py-2 items-center justify-between gap-2 bg-[#582949] px-3 sm:px-6 text-white shadow-md">
         {/* أزرار الإجراءات السريعة في الهيدر */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           <span className="rounded-md bg-[#00A8A8] px-3 py-1.5 text-xs font-bold shadow-sm animate-pulse">
             جاهز للمسح
           </span>
@@ -1049,7 +1049,7 @@ export const PosPage: React.FC = () => {
         </div>
 
         {/* الشعار واسم النظام وسلة التسوق وبيانات المستخدم الحالي */}
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
           <span className="rounded-lg border border-teal-400/40 px-3 py-1 text-xs text-teal-100" title="مخزن الخصم محدد بفرع المستخدم والوردية؛ تغييره من إدارة المستخدمين بعد إغلاق الوردية وتفريغ السلة">
             مخزن الخصم: {activeShiftData?.branch?.name || getCurrentUser()?.branchName || (getCurrentUser()?.branchId ? 'فرع المستخدم المحدد' : 'غير محدد — راجع إدارة المستخدمين')}
           </span>
@@ -1100,10 +1100,10 @@ export const PosPage: React.FC = () => {
       </header>
 
       {/* 2. منطقة العمل الرئيسية (Main Grid Layout) */}
-      <div className="flex flex-1 gap-4 overflow-hidden p-4">
+      <div className="flex flex-col lg:flex-row flex-1 gap-3 lg:gap-4 overflow-y-auto lg:overflow-hidden p-2.5 sm:p-4">
         
         {/* القسم الأيمن: الفاتورة الحالية + الباركود + كروت الأصناف بأسلوب أودو */}
-        <div className="flex flex-1 flex-col gap-3 overflow-hidden">
+        <div className="flex flex-1 flex-col gap-3 min-h-[460px] lg:min-h-0 lg:overflow-hidden">
           
           {/* بطاقة بيانات الفاتورة والفرع واختيار العميل والمديونية */}
           <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm shrink-0">
@@ -1575,7 +1575,7 @@ export const PosPage: React.FC = () => {
         </div>
 
         {/* القسم الأيسر: سلة المبيعات والإجماليات */}
-        <div className="flex w-[480px] flex-col rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="flex w-full lg:w-[400px] xl:w-[480px] shrink-0 flex-col rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="border-b px-5 py-3 bg-slate-50 flex justify-between items-center">
             <h3 className="text-sm font-black text-slate-700">سلة المبيعات</h3>
             <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-bold text-[#00A8A8]">

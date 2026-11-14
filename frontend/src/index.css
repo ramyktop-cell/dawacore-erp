@@ -15,6 +15,13 @@
   }
 }
 
+/* تحسين التوافق مع شاشات الهاتف والتابلت (Responsive Mobile & Tablet) */
+@media (max-width: 1023px) {
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
 @media print {
   /* إخفاء عناصر التنقل والتحكم والسايدبار */
   aside,
