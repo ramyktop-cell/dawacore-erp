@@ -227,40 +227,44 @@ export const DashboardPage: React.FC = () => {
       {/* 🧠 مركز دعم اتخاذ القرارات الذكي (EXECUTIVE DECISION SUPPORT SYSTEM - DSS) */}
       {/* ========================================================================= */}
 
-      <div className="bg-gradient-to-br from-white via-teal-50/25 to-slate-50/70 rounded-3xl p-5 sm:p-6 text-slate-800 shadow-sm border border-teal-200/70 relative overflow-hidden">
-        {/* شريط علوي متدرج مضيء */}
-        <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#00A8A8] via-emerald-400 to-amber-400" />
+      <div className="bg-white rounded-3xl p-5 sm:p-7 text-slate-800 shadow-md border border-slate-200/90 relative overflow-hidden">
+        {/* شريط علوي متدرج مطابق لتصميم الهوية */}
+        <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-[#00A8A8] via-emerald-400 to-amber-400" />
 
         {/* رأس قسم دعم القرار */}
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/80 pb-4 pt-1">
-          <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#00A8A8] to-teal-600 text-white shadow-md shadow-teal-500/20 flex items-center justify-center shrink-0">
-              <BrainCircuit size={22} />
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-base font-black tracking-wide text-slate-900">
-                  مركز دعم اتخاذ القرار (Executive Decision Hub)
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-start justify-between gap-4 pb-4 pt-1">
+          {/* العنوان والأيقونة (يمين) */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3.5">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#0D9488] to-[#0F766E] text-white shadow-md shadow-teal-600/20 flex items-center justify-center shrink-0">
+                <BrainCircuit size={28} />
+              </div>
+              <div>
+                <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-800 leading-tight">
+                  مركز دعم اتخاذ القرار
                 </h2>
-                <span className="flex items-center gap-1 text-[10px] font-bold bg-teal-50 text-[#00A8A8] px-2.5 py-0.5 rounded-full border border-teal-200">
-                  <Sparkles size={11} />
-                  محرك التحليل الاستباقي (DSS)
+                <div className="text-xs font-semibold text-slate-500 tracking-wide">
+                  Executive Decision Hub
+                </div>
+                <span className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-bold bg-[#E6F7F5] text-[#0F766E] px-3 py-0.5 rounded-full border border-teal-200/80">
+                  <Package size={12} />
+                  <span>محرك التحليل الاستباقي (DSS)</span>
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-1">
-                توصيات تشغيلية مدعومة رياضياً لحماية الأرباح، تسريع دورة المخزون، وتحرير رأس المال المجمد
-              </p>
             </div>
+            <p className="text-xs font-semibold text-slate-500">
+              توصيات تشغيلية مدعومة بتحليل بيانات لحماية الأرباح، تسريع دورة المخزون، وتقليل المخزون الراكد.
+            </p>
           </div>
 
-          {/* تبويبات قرارات الـ DSS */}
-          <div className="flex flex-wrap items-center gap-1 bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80">
+          {/* أزرار التبويبات والفلترة (يسار) */}
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             <button
               onClick={() => setActiveDssTab('REORDER')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer border ${
                 activeDssTab === 'REORDER'
-                  ? 'bg-[#00A8A8] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                  ? 'bg-[#0F766E] text-white border-[#0F766E] shadow-xs'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
               }`}
             >
               <Zap size={14} />
@@ -274,10 +278,10 @@ export const DashboardPage: React.FC = () => {
 
             <button
               onClick={() => setActiveDssTab('EXPIRY')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer border ${
                 activeDssTab === 'EXPIRY'
-                  ? 'bg-amber-500 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                  ? 'bg-[#0F766E] text-white border-[#0F766E] shadow-xs'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
               }`}
             >
               <TrendingDown size={14} />
@@ -291,14 +295,14 @@ export const DashboardPage: React.FC = () => {
 
             <button
               onClick={() => setActiveDssTab('DEAD_STOCK')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer border ${
                 activeDssTab === 'DEAD_STOCK'
-                  ? 'bg-violet-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                  ? 'bg-[#0F766E] text-white border-[#0F766E] shadow-xs'
+                  : 'bg-slate-100/90 text-slate-700 border-slate-200 hover:bg-slate-200/70'
               }`}
             >
               <Layers size={14} />
-              <span>رأس المال المجمد (الراكد)</span>
+              <span>رأس المال المجمد (راكد)</span>
               {dssData?.executiveSummary?.deadItemsCount ? (
                 <span className="bg-violet-700 text-white text-[10px] font-mono px-1.5 py-0.2 rounded-full">
                   {dssData.executiveSummary.deadItemsCount}
@@ -308,103 +312,138 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* كروت المؤشرات الاستراتيجية للـ DSS بألوان فاتحة مريحة كالبطاقات */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-5 relative z-10">
-          {/* كارت 1: مخاطر النفاد والشراء */}
+        {/* كروت المؤشرات الاستراتيجية الـ 3 بالتصميم المطابق للصورة */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-4 relative z-10">
+          {/* كارت 1 (يمين): أصناف مهددة بالنفاد (تركواز / أخضر) */}
           <div
             role="button"
             tabIndex={0}
             onClick={() => setActiveDssTab('REORDER')}
-            className="relative overflow-hidden bg-gradient-to-br from-white via-teal-50/40 to-emerald-50/70 border border-teal-200/80 rounded-2xl p-4 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer"
+            className="relative overflow-hidden bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer flex flex-col justify-between"
           >
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#00A8A8] to-emerald-500" />
-            <div className="flex items-center justify-between text-teal-800 mb-1.5">
-              <span className="text-xs font-black">أصناف مهددة بالنفاد (قبل 7 أيام)</span>
-              <div className="p-1.5 rounded-xl bg-teal-500/15 text-[#00A8A8]">
-                <Zap size={16} />
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-teal-500 to-emerald-400" />
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <div className="text-xs sm:text-sm font-bold text-slate-700">
+                  أصناف مهددة بالنفاد (قبل 7 أيام)
+                </div>
+                <div className="mt-2.5 pr-3 border-r-3 border-teal-500 flex items-baseline gap-1.5">
+                  <span className="text-2xl sm:text-3xl font-black font-mono text-slate-900">
+                    {dssData?.executiveSummary?.urgentReorders || 0}
+                  </span>
+                  <span className="text-lg sm:text-xl font-black text-slate-800">أصناف</span>
+                </div>
+              </div>
+              <div className="w-11 h-11 rounded-full bg-[#E6F7F5] text-teal-600 flex items-center justify-center shrink-0">
+                <Zap size={20} />
               </div>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black font-mono text-slate-900">
-                {dssData?.executiveSummary?.urgentReorders || 0}
+            <div className="bg-[#EAF8F6] text-teal-950 rounded-xl px-3.5 py-2.5 text-[11px] font-semibold flex items-center justify-between gap-2">
+              <Package size={16} className="text-teal-600 shrink-0" />
+              <span className="leading-relaxed">
+                محسوبة بناءً على سرعة الاستهلاك الفعلي لآخر 30 يوماً.
               </span>
-              <span className="text-xs font-semibold text-slate-600">أصناف تتطلب أمر شراء استباقي</span>
             </div>
-            <p className="text-[11px] text-teal-700 mt-2 font-medium">
-              محسوبة بناءً على سرعة الاستهلاك الفعلي آخر 30 يوماً
-            </p>
           </div>
 
-          {/* كارت 2: قيمة الخسارة المحتملة من الانتهاء */}
+          {/* كارت 2 (وسط): الخسارة المالية المهددة بالتلف (برتقالي / كهرماني) */}
           <div
             role="button"
             tabIndex={0}
             onClick={() => setActiveDssTab('EXPIRY')}
-            className="relative overflow-hidden bg-gradient-to-br from-white via-amber-50/40 to-orange-50/70 border border-amber-200/80 rounded-2xl p-4 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer"
+            className="relative overflow-hidden bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer flex flex-col justify-between"
           >
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-400 to-orange-500" />
-            <div className="flex items-center justify-between text-amber-900 mb-1.5">
-              <span className="text-xs font-black">الخسارة المالية المهددة بالتلف</span>
-              <div className="p-1.5 rounded-xl bg-amber-500/15 text-amber-600">
-                <TrendingDown size={16} />
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-amber-500 to-amber-300" />
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <div className="text-xs sm:text-sm font-bold text-slate-700">
+                  الخسارة المالية المهددة بالتلف
+                </div>
+                <div className="mt-2.5 pr-3 border-r-3 border-amber-400 flex items-baseline gap-1.5">
+                  <span className="text-2xl sm:text-3xl font-black font-mono text-slate-900">
+                    {(dssData?.executiveSummary?.totalPotentialLoss || 0).toLocaleString()}
+                  </span>
+                  <span className="text-base sm:text-lg font-black text-slate-800">ج.س</span>
+                </div>
+              </div>
+              <div className="w-11 h-11 rounded-full bg-[#FEF3C7] text-amber-600 flex items-center justify-center shrink-0">
+                <TrendingDown size={20} />
               </div>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black font-mono text-amber-700">
-                {(dssData?.executiveSummary?.totalPotentialLoss || 0).toLocaleString()}
+            <div className="bg-[#FFF6E5] text-amber-950 rounded-xl px-3.5 py-2.5 text-[11px] font-semibold flex items-center justify-between gap-2">
+              <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+              <span className="leading-relaxed">
+                تصفيتها فوراً بالخصومات المقترحة قبل انتهاء الصلاحية.
               </span>
-              <span className="text-xs font-semibold text-slate-600">ج.س (قيمة تكلفة)</span>
             </div>
-            <p className="text-[11px] text-amber-800 mt-2 font-medium">
-              تصفيتها فوراً بالخصومات المقترحة ينقذ السيولة قبل انتهاء الصلاحية
-            </p>
           </div>
 
-          {/* كارت 3: رأس المال المجمد في البضاعة الراكدة */}
+          {/* كارت 3 (يسار): رأس المال المجمد (بنفسجي) */}
           <div
             role="button"
             tabIndex={0}
             onClick={() => setActiveDssTab('DEAD_STOCK')}
-            className="relative overflow-hidden bg-gradient-to-br from-white via-violet-50/40 to-purple-50/70 border border-violet-200/80 rounded-2xl p-4 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer"
+            className="relative overflow-hidden bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer flex flex-col justify-between"
           >
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 to-purple-500" />
-            <div className="flex items-center justify-between text-violet-900 mb-1.5">
-              <span className="text-xs font-black">رأس المال المجمد (بدون حركة 60 يوم)</span>
-              <div className="p-1.5 rounded-xl bg-violet-500/15 text-violet-600">
-                <Layers size={16} />
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-purple-600 to-violet-400" />
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <div className="text-xs sm:text-sm font-bold text-slate-700">
+                  رأس المال المجمد (بدون حركة 60 يوم)
+                </div>
+                <div className="mt-2.5 pr-3 border-r-3 border-purple-400 flex items-baseline gap-1.5">
+                  <span className="text-2xl sm:text-3xl font-black font-mono text-slate-900">
+                    {(dssData?.executiveSummary?.totalFrozenCapital || 0).toLocaleString()}
+                  </span>
+                  <span className="text-base sm:text-lg font-black text-slate-800">ج.س</span>
+                </div>
+              </div>
+              <div className="w-11 h-11 rounded-full bg-[#F3E8FF] text-purple-600 flex items-center justify-center shrink-0">
+                <Layers size={20} />
               </div>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black font-mono text-violet-700">
-                {(dssData?.executiveSummary?.totalFrozenCapital || 0).toLocaleString()}
+            <div className="bg-[#F5EEFF] text-purple-950 rounded-xl px-3.5 py-2.5 text-[11px] font-semibold flex items-center justify-between gap-2">
+              <BadgePercent size={16} className="text-purple-600 shrink-0" />
+              <span className="leading-relaxed">
+                يوصى بعمل عروض مجمعة (Bundling) أو تحرير السيولة فوراً.
               </span>
-              <span className="text-xs font-semibold text-slate-600">ج.س مجمدة بالمخازن</span>
             </div>
-            <p className="text-[11px] text-violet-800 mt-2 font-medium">
-              يوصى بعمل عروض مجمعة (Bundling) لتحرير السيولة فوراً
-            </p>
           </div>
         </div>
 
-        {/* تفاصيل التوصيات التفاعلية بناءً على التبويب المختار (بخلفية بيضاء نظيفة) */}
+        {/* تفاصيل التوصيات التفاعلية بناءً على التبويب المختار */}
         <div className="relative z-10 bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
           {isDssLoading ? (
             <div className="p-8 text-center text-slate-500 text-xs font-semibold">
               جاري تشغيل خوارزميات محرك دعم القرارات ومسح المبيعات التاريخية...
             </div>
           ) : activeDssTab === 'REORDER' ? (
-            <div className="p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-3 text-xs">
-                <span className="font-black text-[#00A8A8]">
-                  ⚡ جدول التوصيات الذكية لإعادة الطلب وتفادي نفاد الأصناف:
+            <div className="p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <span className="flex items-center gap-1.5 text-sm sm:text-base font-black text-slate-800">
+                  <Zap size={18} className="text-amber-500 fill-amber-400" />
+                  <span>جدول التوصيات الذكية لإعادة الطلب وتفادي نفاد الأصناف</span>
                 </span>
-                <span className="text-slate-500 text-[11px] font-medium">
-                  معدل التغطية المستهدف: 30 يوماً قادمة
+                <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 border border-slate-200 px-3 py-1.5 rounded-xl text-[11px] font-bold">
+                  <Calendar size={13} className="text-slate-500" />
+                  <span>معدل التغطية المستهدف: 30 يوماً قادمة</span>
                 </span>
               </div>
               {dssData?.reorderRecommendations?.length === 0 ? (
-                <div className="p-6 text-center text-slate-500 text-xs font-medium bg-slate-50/60 rounded-xl">
-                  كافة الأصناف لديها تغطية مخزنية كافية ولا توجد مخاطر نفاد وشيكة.
+                <div className="py-10 px-6 text-center bg-gradient-to-b from-slate-50/70 via-teal-50/25 to-emerald-50/40 border border-slate-100 rounded-2xl">
+                  <div className="w-20 h-20 mx-auto mb-3 rounded-full bg-[#E6F7F5] flex items-center justify-center relative">
+                    <Package size={36} className="text-[#0F766E]" />
+                    <CheckCircle2
+                      size={20}
+                      className="text-emerald-600 bg-white rounded-full absolute bottom-1.5 left-1.5"
+                    />
+                  </div>
+                  <div className="text-sm sm:text-base font-black text-slate-800">
+                    كافة الأصناف لديها تغطية مخزنية كافية ولا توجد حالات نفاد وشيكة.
+                  </div>
+                  <div className="text-xs text-slate-500 font-semibold mt-1">
+                    معدل التغطية الحالي يلبي خطة التشغيل ويضمن استمرارية التوريد خلال 30 يوماً قادمة.
+                  </div>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
