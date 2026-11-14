@@ -5,6 +5,7 @@ import { PageHeader } from '../components/common/PageHeader';
 import { DataTable } from '../components/common/DataTable';
 import { MedicineFormModal } from '../components/medicines/MedicineFormModal';
 import { OdooImportModal } from '../components/medicines/OdooImportModal';
+import { PriceListReportModal } from '../components/medicines/PriceListReportModal';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { BarcodeLabelModal } from '../components/common/BarcodeLabelModal';
 import { useBusinessTerminology } from '../hooks/useBusinessTerminology';
@@ -25,10 +26,11 @@ import {
   Printer,
   FileSpreadsheet,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 export const MedicinesPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const terms = useBusinessTerminology();
   const isPharmacy = terms.type === 'PHARMACY';
   const [search, setSearch] = useState('');
@@ -39,6 +41,9 @@ export const MedicinesPage: React.FC = () => {
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isOdooImportOpen, setIsOdooImportOpen] = useState(false);
+  const [isPriceListOpen, setIsPriceListOpen] = useState(
+    () => searchParams.get('priceList') === '1',
+  );
   const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [medicineToDelete, setMedicineToDelete] = useState<Medicine | null>(null);
@@ -273,7 +278,14 @@ export const MedicinesPage: React.FC = () => {
         title={terms.catalogPageTitle}
         subtitle={terms.catalogPageSubtitle}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setIsPriceListOpen(true)}
+              className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5 text-xs font-bold text-amber-900 shadow-xs hover:bg-amber-100 transition cursor-pointer"
+            >
+              <Printer className="w-4 h-4 text-amber-700" />
+              <span>قائمة الأسعار (حسب الشركة)</span>
+            </button>
             <button
               onClick={() => setIsOdooImportOpen(true)}
               className="flex items-center gap-2 rounded-xl bg-[#582949] px-4 py-2.5 text-xs font-bold text-white shadow hover:bg-[#481D3E] transition cursor-pointer"
@@ -478,6 +490,18 @@ export const MedicinesPage: React.FC = () => {
           queryClient.invalidateQueries({ queryKey: ['medicines'] });
           queryClient.invalidateQueries({ queryKey: ['medicines-categories'] });
           queryClient.invalidateQueries({ queryKey: ['batches'] });
+        }}
+      />
+
+      {/* Price List Report Modal (Grouped by Company) */}
+      <PriceListReportModal
+        isOpen={isPriceListOpen}
+        onClose={() => {
+          setIsPriceListOpen(false);
+          if (searchParams.has('priceList')) {
+            searchParams.delete('priceList');
+            setSearchParams(searchParams, { replace: true });
+          }
         }}
       />
     </div>
