@@ -227,10 +227,10 @@ export const DashboardPage: React.FC = () => {
       {/* 🧠 مركز دعم اتخاذ القرارات الذكي (EXECUTIVE DECISION SUPPORT SYSTEM - DSS) */}
       {/* ========================================================================= */}
 
-      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 rounded-3xl p-6 text-white shadow-xl border border-indigo-500/20 relative overflow-hidden">
-        {/* خلفية جمالية */}
-        <div className="absolute top-0 right-0 -mt-8 -mr-8 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 -mb-8 -ml-8 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="bg-gradient-to-br from-[#3D1834] via-[#582949] to-[#1F3A5F] rounded-3xl p-5 sm:p-6 text-white shadow-xl border border-[#00A8A8]/30 relative overflow-hidden">
+        {/* خلفية جمالية بهوية النظام */}
+        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-72 h-72 bg-[#00A8A8]/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-72 h-72 bg-amber-400/10 rounded-full blur-3xl pointer-events-none" />
 
         {/* رأس قسم دعم القرار */}
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-5">
@@ -653,118 +653,217 @@ export const DashboardPage: React.FC = () => {
         </div>
       ) : data ? (
         <>
-          {/* ===== 1. بطاقات المؤشرات القيادية السريعة (KPI Cards) ===== */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5">
-            {/* مبيعات اليوم */}
-            <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition">
-              <div className="flex items-center justify-between text-emerald-600 mb-2">
-                <span className="text-[11px] font-bold">مبيعات اليوم</span>
-                <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
-                  <TrendingUp size={16} />
+          {/* ===== 1. بطاقات المؤشرات القيادية السريعة المرتبطة بالتقارير (Interactive KPI Cards) ===== */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+            {/* 1. مبيعات اليوم -> تقرير المبيعات اليومية */}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate('/reports/daily-sales')}
+              onKeyDown={(e) => e.key === 'Enter' && navigate('/reports/daily-sales')}
+              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-emerald-50/40 to-teal-50/70 border border-emerald-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+            >
+              <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-emerald-500 to-[#00A8A8]" />
+              <div>
+                <div className="flex items-center justify-between text-emerald-800 mb-2.5 mt-0.5">
+                  <span className="text-xs font-black">مبيعات اليوم</span>
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-500 to-[#00A8A8] text-white shadow-md shadow-emerald-500/20 group-hover:scale-110 transition-transform">
+                    <TrendingUp size={16} />
+                  </div>
                 </div>
+                <p className="text-xl font-black text-slate-900 font-mono tracking-tight">
+                  {data.summary.salesToday.toLocaleString()}{' '}
+                  <span className="text-[10px] font-bold text-slate-500">ج.س</span>
+                </p>
               </div>
-              <p className="text-xl font-black text-slate-800 font-mono">
-                {data.summary.salesToday.toLocaleString()}{' '}
-                <span className="text-[10px] font-normal text-slate-500">ج.س</span>
-              </p>
-              <p className="text-[10px] text-slate-400 mt-1 font-medium">
-                {data.summary.invoicesCount} فاتورة مصدرة
-              </p>
+              <div className="mt-3 pt-2 border-t border-emerald-200/60 flex items-center justify-between text-[10px] font-bold text-emerald-700">
+                <span>{data.summary.invoicesCount} فاتورة مصدرة</span>
+                <span className="inline-flex items-center gap-0.5 text-[#00A8A8] group-hover:translate-x-[-2px] transition-transform">
+                  <span>تقرير اليوم</span>
+                  <ArrowUpRight size={12} />
+                </span>
+              </div>
             </div>
 
-            {/* مبيعات الشهر الحالي */}
-            <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition">
-              <div className="flex items-center justify-between text-[#00A8A8] mb-2">
-                <span className="text-[11px] font-bold">مبيعات الشهر</span>
-                <div className="p-2 rounded-xl bg-teal-50 text-[#00A8A8]">
-                  <ShoppingBag size={16} />
+            {/* 2. مبيعات الشهر الحالي -> سجل فواتير المبيعات */}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate('/sales/invoices')}
+              onKeyDown={(e) => e.key === 'Enter' && navigate('/sales/invoices')}
+              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-teal-50/40 to-cyan-50/70 border border-teal-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+            >
+              <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#00A8A8] to-[#1F3A5F]" />
+              <div>
+                <div className="flex items-center justify-between text-[#1F3A5F] mb-2.5 mt-0.5">
+                  <span className="text-xs font-black">مبيعات الشهر</span>
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-[#00A8A8] to-[#1F3A5F] text-white shadow-md shadow-teal-600/20 group-hover:scale-110 transition-transform">
+                    <ShoppingBag size={16} />
+                  </div>
                 </div>
+                <p className="text-xl font-black text-slate-900 font-mono tracking-tight">
+                  {data.summary.salesMonth.toLocaleString()}{' '}
+                  <span className="text-[10px] font-bold text-slate-500">ج.س</span>
+                </p>
               </div>
-              <p className="text-xl font-black text-slate-800 font-mono">
-                {data.summary.salesMonth.toLocaleString()}{' '}
-                <span className="text-[10px] font-normal text-slate-500">ج.س</span>
-              </p>
-              <p className="text-[10px] text-teal-600 mt-1 font-bold">إجمالي التراكمي للشهر</p>
+              <div className="mt-3 pt-2 border-t border-teal-200/60 flex items-center justify-between text-[10px] font-bold text-teal-800">
+                <span>إجمالي الشهر</span>
+                <span className="inline-flex items-center gap-0.5 text-[#00A8A8] group-hover:translate-x-[-2px] transition-transform">
+                  <span>سجل الفواتير</span>
+                  <ArrowUpRight size={12} />
+                </span>
+              </div>
             </div>
 
-            {/* مصروفات اليوم */}
-            <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition">
-              <div className="flex items-center justify-between text-rose-600 mb-2">
-                <span className="text-[11px] font-bold">مصروفات اليوم</span>
-                <div className="p-2 rounded-xl bg-rose-50 text-rose-600">
-                  <Wallet size={16} />
+            {/* 3. مصروفات اليوم -> سندات الصرف والمصروفات */}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate('/expenses')}
+              onKeyDown={(e) => e.key === 'Enter' && navigate('/expenses')}
+              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-rose-50/40 to-pink-50/70 border border-rose-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+            >
+              <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-rose-500 to-[#582949]" />
+              <div>
+                <div className="flex items-center justify-between text-rose-800 mb-2.5 mt-0.5">
+                  <span className="text-xs font-black">مصروفات اليوم</span>
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-rose-500 to-[#582949] text-white shadow-md shadow-rose-500/20 group-hover:scale-110 transition-transform">
+                    <Wallet size={16} />
+                  </div>
                 </div>
+                <p className="text-xl font-black text-slate-900 font-mono tracking-tight">
+                  {(data.summary.expensesToday || 0).toLocaleString()}{' '}
+                  <span className="text-[10px] font-bold text-slate-500">ج.س</span>
+                </p>
               </div>
-              <p className="text-xl font-black text-slate-800 font-mono">
-                {(data.summary.expensesToday || 0).toLocaleString()}{' '}
-                <span className="text-[10px] font-normal text-slate-500">ج.س</span>
-              </p>
-              <p className="text-[10px] text-rose-600 mt-1 font-bold">سندات صرف معتمدة</p>
+              <div className="mt-3 pt-2 border-t border-rose-200/60 flex items-center justify-between text-[10px] font-bold text-rose-700">
+                <span>سندات صرف معتمدة</span>
+                <span className="inline-flex items-center gap-0.5 text-[#582949] group-hover:translate-x-[-2px] transition-transform">
+                  <span>سندات الصرف</span>
+                  <ArrowUpRight size={12} />
+                </span>
+              </div>
             </div>
 
-            {/* الوردية النشطة */}
-            <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition">
-              <div className="flex items-center justify-between text-indigo-600 mb-2">
-                <span className="text-[11px] font-bold">الورديات النشطة</span>
-                <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
-                  <Clock size={16} />
+            {/* 4. الوردية النشطة -> شاشة الورديات والصندوق */}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate('/shifts')}
+              onKeyDown={(e) => e.key === 'Enter' && navigate('/shifts')}
+              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-indigo-50/40 to-slate-100/80 border border-indigo-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+            >
+              <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#1F3A5F] to-indigo-600" />
+              <div>
+                <div className="flex items-center justify-between text-[#1F3A5F] mb-2.5 mt-0.5">
+                  <span className="text-xs font-black">الوردية النشطة</span>
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-[#1F3A5F] to-indigo-600 text-white shadow-md shadow-indigo-500/20 group-hover:scale-110 transition-transform">
+                    <Clock size={16} />
+                  </div>
                 </div>
+                <p className="text-sm font-black text-slate-900 truncate">
+                  {data.activeShift ? data.activeShift.cashier : 'مغلقة حالياً'}
+                </p>
+                <p className="text-[10px] text-indigo-700 mt-1 font-mono font-bold truncate">
+                  {data.activeShift
+                    ? `وردية #${data.activeShift.shiftNumber} (${data.activeShift.expectedCash.toLocaleString()} ج.س)`
+                    : 'لا توجد وردية مفتوحة'}
+                </p>
               </div>
-              <p className="text-sm font-black text-slate-800 truncate">
-                {data.activeShift ? data.activeShift.cashier : 'مغلقة حالياً'}
-              </p>
-              <p className="text-[10px] text-indigo-600 mt-1 font-mono">
-                {data.activeShift
-                  ? `وردية #${data.activeShift.shiftNumber} (${data.activeShift.expectedCash.toLocaleString()} ج.س)`
-                  : 'لا توجد وردية مفتوحة'}
-              </p>
+              <div className="mt-2.5 pt-2 border-t border-indigo-200/60 flex items-center justify-between text-[10px] font-bold text-[#1F3A5F]">
+                <span>حركة الصندوق</span>
+                <span className="inline-flex items-center gap-0.5 text-indigo-600 group-hover:translate-x-[-2px] transition-transform">
+                  <span>إدارة الورديات</span>
+                  <ArrowUpRight size={12} />
+                </span>
+              </div>
             </div>
 
-            {/* مديونية العملاء */}
-            <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition">
-              <div className="flex items-center justify-between text-amber-600 mb-2">
-                <span className="text-[11px] font-bold">ديون العملاء (AR)</span>
-                <div className="p-2 rounded-xl bg-amber-50 text-amber-600">
-                  <Users size={16} />
+            {/* 5. مديونية العملاء -> شاشة العملاء والمديونيات */}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate('/customers')}
+              onKeyDown={(e) => e.key === 'Enter' && navigate('/customers')}
+              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-amber-50/50 to-orange-50/70 border border-amber-200/90 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+            >
+              <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#B8892B] to-amber-500" />
+              <div>
+                <div className="flex items-center justify-between text-amber-900 mb-2.5 mt-0.5">
+                  <span className="text-xs font-black">ديون العملاء (AR)</span>
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-[#B8892B] to-amber-500 text-white shadow-md shadow-amber-500/20 group-hover:scale-110 transition-transform">
+                    <Users size={16} />
+                  </div>
                 </div>
+                <p className="text-xl font-black text-slate-900 font-mono tracking-tight">
+                  {data.summary.totalCustomerDebt.toLocaleString()}{' '}
+                  <span className="text-[10px] font-bold text-slate-500">ج.س</span>
+                </p>
               </div>
-              <p className="text-xl font-black text-slate-800 font-mono">
-                {data.summary.totalCustomerDebt.toLocaleString()}{' '}
-                <span className="text-[10px] font-normal text-slate-500">ج.س</span>
-              </p>
-              <p className="text-[10px] text-amber-600 mt-1 font-bold">مستحقات آجلة طرف العملاء</p>
+              <div className="mt-3 pt-2 border-t border-amber-200/70 flex items-center justify-between text-[10px] font-bold text-amber-800">
+                <span>ذمم مدينة آجلة</span>
+                <span className="inline-flex items-center gap-0.5 text-[#B8892B] group-hover:translate-x-[-2px] transition-transform">
+                  <span>كشوف العملاء</span>
+                  <ArrowUpRight size={12} />
+                </span>
+              </div>
             </div>
 
-            {/* مستحقات الموردين */}
-            <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition">
-              <div className="flex items-center justify-between text-purple-600 mb-2">
-                <span className="text-[11px] font-bold">مستحقات الموردين (AP)</span>
-                <div className="p-2 rounded-xl bg-purple-50 text-purple-600">
-                  <Truck size={16} />
+            {/* 6. مستحقات الموردين -> شاشة الموردين وكشف الحساب */}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate('/suppliers')}
+              onKeyDown={(e) => e.key === 'Enter' && navigate('/suppliers')}
+              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-fuchsia-50/40 to-purple-50/70 border border-purple-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+            >
+              <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#582949] to-purple-600" />
+              <div>
+                <div className="flex items-center justify-between text-[#582949] mb-2.5 mt-0.5">
+                  <span className="text-xs font-black">مستحقات الموردين (AP)</span>
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-[#582949] to-purple-600 text-white shadow-md shadow-purple-500/20 group-hover:scale-110 transition-transform">
+                    <Truck size={16} />
+                  </div>
                 </div>
+                <p className="text-xl font-black text-slate-900 font-mono tracking-tight">
+                  {data.summary.totalSupplierDebt.toLocaleString()}{' '}
+                  <span className="text-[10px] font-bold text-slate-500">ج.س</span>
+                </p>
               </div>
-              <p className="text-xl font-black text-slate-800 font-mono">
-                {data.summary.totalSupplierDebt.toLocaleString()}{' '}
-                <span className="text-[10px] font-normal text-slate-500">ج.س</span>
-              </p>
-              <p className="text-[10px] text-purple-600 mt-1 font-bold">فواتير مشتريات مستحقة</p>
+              <div className="mt-3 pt-2 border-t border-purple-200/60 flex items-center justify-between text-[10px] font-bold text-[#582949]">
+                <span>ذمم دائنة للموردين</span>
+                <span className="inline-flex items-center gap-0.5 text-purple-700 group-hover:translate-x-[-2px] transition-transform">
+                  <span>حسابات الموردين</span>
+                  <ArrowUpRight size={12} />
+                </span>
+              </div>
             </div>
           </div>
 
           {/* ===== 2. الرسوم البيانية والمؤشرات المرئية ===== */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* مخطط حركة مبيعات الأسبوع */}
-            <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs">
-              <div className="flex items-center justify-between mb-4">
+            <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/90 p-5 shadow-sm hover:shadow-md transition">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                 <div>
-                  <h3 className="text-xs font-black text-slate-800">
+                  <h3 className="text-xs font-black text-[#1F3A5F]">
                     حركة المبيعات لآخر 7 أيام (Daily Sales Trend)
                   </h3>
                   <p className="text-[11px] text-slate-400">تتبع حجم المبيعات اليومية بالجنيه السوداني</p>
                 </div>
-                <span className="text-xs font-mono font-bold text-[#00A8A8] bg-teal-50 px-2.5 py-1 rounded-lg">
-                  7 أيام
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/reports/daily-sales')}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-[#00A8A8] hover:text-[#582949] bg-teal-50/80 hover:bg-teal-100/80 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                  >
+                    <span>تقرير المبيعات التفصيلي</span>
+                    <ArrowUpRight size={12} />
+                  </button>
+                  <span className="text-xs font-mono font-bold text-white bg-gradient-to-r from-[#582949] to-[#00A8A8] px-2.5 py-1 rounded-lg shadow-2xs">
+                    7 أيام
+                  </span>
+                </div>
               </div>
 
               {/* Native Responsive Bar Chart */}
@@ -1026,15 +1125,22 @@ export const DashboardPage: React.FC = () => {
           {/* ===== 4. الجداول التشغيلية: آخر النشاطات ونواقص المخزون ===== */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* آخر الفواتير والنشاطات الحية */}
-            <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-slate-200 flex justify-between items-center bg-slate-50/70">
+            <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 bg-gradient-to-l from-[#582949]/5 via-slate-50 to-teal-50/40">
                 <div className="flex items-center gap-2">
                   <ShoppingBag size={16} className="text-[#00A8A8]" />
-                  <h3 className="text-xs font-black text-slate-800">
+                  <h3 className="text-xs font-black text-[#1F3A5F]">
                     أحدث فواتير المبيعات وسندات الصرف (Live Stream)
                   </h3>
                 </div>
-                <span className="text-[11px] font-bold text-slate-500">سجل حركي مباشر</span>
+                <button
+                  type="button"
+                  onClick={() => navigate('/sales/invoices')}
+                  className="text-[11px] font-bold text-[#00A8A8] hover:text-[#582949] transition cursor-pointer inline-flex items-center gap-1"
+                >
+                  <span>عرض سجل الفواتير</span>
+                  <ArrowUpRight size={12} />
+                </button>
               </div>
 
               <div className="overflow-x-auto">
