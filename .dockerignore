@@ -1,0 +1,24 @@
+# Ignore dependencies and build artifacts
+node_modules
+dist
+coverage
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Ignore frontend folder in backend build context
+frontend
+
+# Ignore logs, backups and temporary test files
+*.log
+npm-debug.log*
+backups
+.vscode
+.idea
+README.md
+SYSTEM_STATUS.md
+docker-compose*.yml
+Dockerfile*

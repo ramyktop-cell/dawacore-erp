@@ -1,0 +1,973 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UnitType {
+  UNIT
+  STRIP
+  BOX
+}
+
+enum TransactionType {
+  PURCHASE
+  SALE
+  SALE_RETURN
+  PURCHASE_RETURN
+  TRANSFER_IN
+  TRANSFER_OUT
+  INVENTORY_ADJUSTMENT
+  DAMAGE
+  DAMAGED_RETURN
+}
+
+enum PurchaseStatus {
+  PENDING
+  RECEIVED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CARD
+  TRANSFER
+  CREDIT
+  MIXED
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+  APPROVED
+}
+
+enum SaleStatus {
+  COMPLETED
+  PARTIAL_RETURN
+  RETURNED
+  CANCELLED
+}
+
+
+enum ReturnCondition {
+  RESTOCKABLE
+  DAMAGED
+}
+
+enum CashMovementType {
+  CASH_IN
+  CASH_OUT
+}
+
+enum PartnerType {
+  CUSTOMER
+  SUPPLIER
+}
+
+model Medicine {
+  id             String         @id @default(uuid())
+  code           String         @unique
+  barcode        String         @unique
+  scientificName String
+  tradeName      String
+  category       String
+  minStockLevel  Int            @default(10)
+  units          MedicineUnit[]
+  batches        Batch[]
+  purchaseItems  PurchaseItem[]
+  saleInvoiceItems SaleInvoiceItem[]
+  createdAt      DateTime       @default(now())
+
+  @@index([barcode, tradeName, scientificName])
+}
+
+model MedicineUnit {
+  id          String   @id @default(uuid())
+  medicineId  String
+  medicine    Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+  unitType    UnitType
+  multiplier  Int      // معامل التحويل للحبة: الحبة = 1، الشريط = 10، العلبة = 30
+  barcode     String?  @unique
+  price       Decimal  @db.Decimal(12, 2)
+  isDefault   Boolean  @default(false)
+
+  @@unique([medicineId, unitType])
+}
+
+model Batch {
+  id                  String               @id @default(uuid())
+  batchNumber         String
+  medicineId          String
+  medicine            Medicine             @relation(fields: [medicineId], references: [id])
+  branchId            String
+  costPrice           Decimal              @db.Decimal(12, 4)
+  salePrice           Decimal              @db.Decimal(12, 2)
+  expiryDate          DateTime
+  quantityInBase      Int                  // الكمية المتبقية مقاسة بالوحدة الأساسية (الحبة)
+  quantity            Int                  @default(0) // الرصيد المتاح بالوحدة الحالية
+  isFrozen            Boolean              @default(false)
+  frozenAt            DateTime?
+  frozenReason        String?
+  stockCountId        String?
+  stockCount          StockCount?          @relation("BatchFrozenByStockCount", fields: [stockCountId], references: [id], onDelete: SetNull)
+  stockCountItems     StockCountItem[]
+  createdAt           DateTime             @default(now())
+  transactions        InventoryTransaction[]
+  purchaseItems       PurchaseItem[]
+  saleItems           SaleItem[]
+  saleReturnItems     SaleReturnItem[]
+  purchaseReturnItems PurchaseReturnItem[]
+  saleInvoiceItems    SaleInvoiceItem[]
+
+  @@unique([batchNumber, medicineId, branchId])
+  // الفهرس المغطى المعتمد لسرعة استعلامات الـ FEFO والقفل الحصري
+  @@index([medicineId, branchId, expiryDate, quantityInBase])
+  @@index([expiryDate])
+}
+
+model InventoryTransaction {
+  id              String          @id @default(uuid())
+  batchId         String
+  batch           Batch           @relation(fields: [batchId], references: [id])
+  branchId        String
+  transactionType TransactionType
+  quantity        Int             // قيمة سالبة للصرف، وقيمة موجبة للإيداع والتوريد
+  runningBalance  Int             // الرصيد التراكمي المتبقي في الدفعة لحظة إتمام الحركة
+  unitCost        Decimal         @db.Decimal(12, 4)
+  referenceId     String          // رقم الفاتورة أو إذن الاستلام أو محضر الجرد
+  userId          String
+  notes           String?
+  createdAt       DateTime        @default(now())
+
+  @@index([batchId, branchId, transactionType])
+  @@index([referenceId])
+}
+
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  timezone  String   @default("Africa/Cairo")
+  currency  String   @default("SDG")
+  logoUrl   String?
+  taxNumber String?
+  phone     String?
+  email     String?
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches  Branch[]
+  users     User[]
+  customers Customer[]
+  suppliers Supplier[]
+  shifts    Shift[]
+  invoices  SalesInvoice[]
+  purchases PurchaseOrder[]
+  accounts  Account[]
+  journalEntries JournalEntry[]
+  expenses  Expense[]
+  auditLogs AuditLog[]
+  stockCounts StockCount[]
+  openingBalances OpeningBalance[]
+}
+
+model Branch {
+  id                   String                 @id @default(uuid())
+  companyId            String
+  name                 String
+  code                 String
+  phone                String?
+  address              String?
+  isMain               Boolean                @default(false)
+  isActive             Boolean                @default(true)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  company              Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  purchases            PurchaseOrder[]
+  purchaseReturns      PurchaseReturn[]
+  shifts               Shift[]
+  sales                Sale[]
+  saleReturns          SaleReturn[]
+  customers            Customer[]
+  suppliers            Supplier[]
+  users                User[]
+  invoices             SalesInvoice[]
+  journalEntries       JournalEntry[]
+  branchAccountMapping BranchAccountMapping?
+  accounts             Account[]
+  expenses             Expense[]
+  stockCounts          StockCount[]
+  openingBalances      OpeningBalance[]
+
+  @@unique([companyId, code])
+}
+
+model Supplier {
+  id              String             @id @default(uuid())
+  companyId       String
+  company         Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId        String
+  branch          Branch             @relation(fields: [branchId], references: [id])
+  name            String
+  companyName     String?
+  phone           String
+  taxNumber       String?
+  currentDebt     Decimal            @default(0) @db.Decimal(12, 2)
+  address         String?
+  notes           String?
+  isActive        Boolean            @default(true)
+  purchases       PurchaseOrder[]
+  purchaseReturns PurchaseReturn[]
+  ledgerLines     JournalLine[] // الربط المباشر بدفتر الأستاذ
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([companyId, branchId])
+}
+
+model PurchaseOrder {
+  id            String         @id @default(uuid())
+  companyId     String
+  branchId      String
+  supplierId    String
+  orderNumber   String         // رقم أمر الشراء
+  invoiceNumber String?        // رقم فاتورة المورد
+  status        PurchaseStatus @default(PENDING)
+  totalAmount   Decimal        @default(0.0) @db.Decimal(12, 2)
+  paidAmount    Decimal        @default(0.0) @db.Decimal(12, 2)
+  
+  additionalExpenses      Decimal?       @default(0.0) @db.Decimal(12, 2) // مصاريف إضافية (نولون، عتالة، رسوم)
+  expenseAllocationMethod String?        @default("LANDED_COST")          // LANDED_COST أو PERIOD_EXPENSE
+  expenseNotes            String?        // تفاصيل المصاريف الإضافية
+  
+  createdBy     String         // المستخدم الذي أنشأ الطلب
+  receivedBy    String?        // المستخدم الذي استلم وفحص البضاعة
+  receivedAt    DateTime?
+  
+  notes         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branch        Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  supplier      Supplier       @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  items         PurchaseItem[]
+  purchaseReturns PurchaseReturn[]
+
+  @@unique([branchId, orderNumber])
+  @@index([supplierId])
+  @@index([companyId, branchId, status])
+}
+
+model PurchaseItem {
+  id                  String               @id @default(uuid())
+  purchaseOrderId     String
+  purchaseOrder       PurchaseOrder        @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  medicineId          String
+  medicine            Medicine             @relation(fields: [medicineId], references: [id])
+  batchNumber         String
+  expiryDate          DateTime
+  unitType            UnitType?            @default(BOX)
+  multiplier          Int?                 @default(1)
+  quantity            Int                  // الكمية المشتراة
+  costPrice           Decimal              @db.Decimal(12, 4) // سعر الشراء للوحدة
+  sellingPrice        Decimal?             @db.Decimal(12, 2) // سعر البيع المقترح
+  subtotal            Decimal              @db.Decimal(12, 2) // quantity * costPrice
+  allocatedExpense    Decimal?             @default(0.0) @db.Decimal(12, 4) // نصيب البند من المصاريف الإضافية
+  landedCost          Decimal?             @db.Decimal(12, 4)               // التكلفة الفعلية بعد التكليف
+  batchId             String?
+  batch               Batch?               @relation(fields: [batchId], references: [id])
+  purchaseReturnItems PurchaseReturnItem[]
+
+  @@index([purchaseOrderId])
+  @@index([medicineId])
+}
+
+model Shift {
+  id              String       @id @default(uuid())
+  companyId       String
+  branchId        String
+  userId          String       // الكاشير المسؤول عن الوردية
+  shiftNumber     Int          // رقم تسلسلي للوردية داخل الفرع
+  status          ShiftStatus  @default(OPEN)
+  
+  openedAt        DateTime     @default(now())
+  closedAt        DateTime?
+  approvedAt      DateTime?
+  approvedBy      String?      // المشرف أو المدير الذي اعتمد الوردية
+
+  openingBalance  Decimal      @default(0.0) @db.Decimal(12, 2) // رصيد بداية الوردية (العهدة النقدية)
+  expectedCash    Decimal      @default(0.0) @db.Decimal(12, 2) // النقد المتوقع بالصندوق (الافتتاحي + المبيعات النقدية)
+  actualCash      Decimal?     @db.Decimal(12, 2) // النقد الفعلي الذي تم جره وعدّه يدوياً
+  cashDifference  Decimal?     @db.Decimal(12, 2) // الفرق: actualCash - expectedCash (سالب = عجز، موجب = زيادة)
+
+  totalSalesCash  Decimal      @default(0.0) @db.Decimal(12, 2) // إجمالي المبيعات النقدية
+  totalSalesBank  Decimal      @default(0.0) @db.Decimal(12, 2) // إجمالي المدفوع عبر البنك
+  totalSalesCredit Decimal     @default(0.0) @db.Decimal(12, 2) // إجمالي الآجل
+  totalSales      Decimal      @default(0.0) @db.Decimal(12, 2) // الإجمالي العام للمبيعات
+
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  company         Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branch          Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoices        SalesInvoice[]
+  sales           Sale[]
+  returns         SaleReturn[]
+  cashMovements   CashMovement[]
+  expenses        Expense[]
+
+  @@index([branchId, status])
+  @@index([userId])
+}
+
+model SalesInvoice {
+  id              String        @id @default(uuid())
+  companyId       String
+  branchId        String
+  shiftId         String
+  userId          String        // الكاشير الذي أصدر الفاتورة
+  customerId      String?       // فارغ في حالة البيع المباشر النقدي
+  invoiceNumber   String        // رقم الفاتورة التسلسلي (INV-2026-0001)
+
+  totalAmount     Decimal       @db.Decimal(12, 2) // القيمة الإجمالية قبل الخصم
+  discountAmount  Decimal       @default(0.0) @db.Decimal(12, 2)
+  netAmount       Decimal       @db.Decimal(12, 2) // المبلغ الصافي المطلوب
+  paidAmount      Decimal       @db.Decimal(12, 2) // المدفوع فعلياً
+  remainingAmount Decimal       @default(0.0) @db.Decimal(12, 2) // المتبقي (آجل)
+
+  paymentMethod   PaymentMethod @default(CASH)
+  bankReference   String?       // رقم إشعار التحويل في حالة السداد البنكي
+  notes           String?
+  createdAt       DateTime      @default(now())
+
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branch          Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  shift           Shift         @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customer        Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items           SaleInvoiceItem[]
+
+  @@unique([branchId, invoiceNumber])
+  @@index([shiftId])
+  @@index([customerId])
+}
+
+model SaleInvoiceItem {
+  id          String       @id @default(uuid())
+  invoiceId   String
+  medicineId  String
+  batchId     String
+  quantity    Int
+  unitPrice   Decimal      @db.Decimal(12, 2)
+  costPrice   Decimal      @db.Decimal(12, 4) // سعر التكلفة للباتش وقت البيع (لحساب أرباح الفاتورة)
+  subtotal    Decimal      @db.Decimal(12, 2)
+
+  invoice     SalesInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  medicine    Medicine     @relation(fields: [medicineId], references: [id])
+  batch       Batch        @relation(fields: [batchId], references: [id])
+
+  @@index([invoiceId])
+  @@index([batchId])
+}
+
+model CashMovement {
+  id           String           @id @default(uuid())
+  shiftId      String
+  shift        Shift            @relation(fields: [shiftId], references: [id])
+  type         CashMovementType
+  amount       Decimal          @db.Decimal(12, 2)
+  reason       String
+  authorizedBy String           // userId للمدير المشرف
+  createdAt    DateTime         @default(now())
+
+  @@index([shiftId, type])
+}
+
+model Customer {
+  id           String                @id @default(uuid())
+  companyId    String
+  company      Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId     String                // <-- عزل العميل حسب الفرع
+  branch       Branch                @relation(fields: [branchId], references: [id])
+  name         String
+  phone        String
+  nationalId   String?
+  creditLimit  Decimal               @default(0) @db.Decimal(12, 2)
+  currentDebt  Decimal               @default(0) @db.Decimal(12, 2)
+  address      String?
+  notes        String?
+  isActive     Boolean               @default(true)
+  transactions CustomerTransaction[]
+  sales        Sale[]
+  invoices     SalesInvoice[]
+  ledgerLines  JournalLine[]    // الربط المباشر بدفتر الأستاذ
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@index([companyId, branchId])
+  @@index([phone])
+}
+
+// ------------------- سجل حركات العميل (Ledger) -------------------
+model CustomerTransaction {
+  id           String    @id @default(uuid())
+  customerId   String
+  customer     Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type         String    // SALE, PAYMENT, RETURN, ADJUSTMENT, OPENING_BALANCE
+  amount       Decimal   @db.Decimal(12, 2) // القيمة المطلقة للتغيير
+  balanceAfter Decimal   @db.Decimal(12, 2) // الرصيد بعد هذه الحركة
+  referenceId  String?   // رقم الفاتورة، سند القبض، إلخ
+  description  String?
+  createdBy    String    // userId
+  createdAt    DateTime  @default(now())
+
+  @@index([customerId, createdAt])
+}
+
+model Sale {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique
+  branchId      String
+  branch        Branch        @relation(fields: [branchId], references: [id])
+  cashierId     String        // userId
+  shiftId       String
+  shift         Shift         @relation(fields: [shiftId], references: [id])
+  customerId    String?
+  customer      Customer?     @relation(fields: [customerId], references: [id])
+  subTotal            Decimal       @db.Decimal(12, 2)
+  itemsDiscountTotal  Decimal       @default(0) @db.Decimal(12, 2)
+  invoiceDiscount     Decimal       @default(0) @db.Decimal(12, 2)
+  discountTotal       Decimal       @default(0) @db.Decimal(12, 2)
+  taxTotal            Decimal       @default(0) @db.Decimal(12, 2)
+  grandTotal          Decimal       @db.Decimal(12, 2)
+  paidAmount          Decimal       @db.Decimal(12, 2)
+  changeAmount        Decimal       @default(0) @db.Decimal(12, 2)
+  paymentMethod       PaymentMethod @default(CASH)
+  status              SaleStatus    @default(COMPLETED)
+  items               SaleItem[]
+  payments            SalePayment[]
+  returns             SaleReturn[]
+  createdAt           DateTime      @default(now())
+
+  @@index([branchId, cashierId, createdAt])
+  @@index([shiftId])
+  @@index([invoiceNumber])
+}
+
+model SaleItem {
+  id              String           @id @default(uuid())
+  saleId          String
+  sale            Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  batchId         String
+  batch           Batch            @relation(fields: [batchId], references: [id])
+  unitType        UnitType
+  multiplier      Int
+  quantity        Decimal          @db.Decimal(12, 4)
+  totalBaseQty    Int
+  returnedQty     Int              @default(0) // الكمية المرتجعة بالحبات
+  unitPrice       Decimal          @db.Decimal(12, 2)
+  discountAmount  Decimal          @default(0) @db.Decimal(12, 2)
+  costPrice       Decimal          @db.Decimal(12, 4)
+  totalPrice      Decimal          @db.Decimal(12, 2)
+  saleReturnItems SaleReturnItem[]
+
+  @@index([saleId])
+  @@index([batchId])
+}
+
+model SalePayment {
+  id          String        @id @default(uuid())
+  saleId      String
+  sale        Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  method      PaymentMethod
+  amount      Decimal       @db.Decimal(12, 2)
+  referenceNo String?
+  createdAt   DateTime      @default(now())
+
+  @@index([saleId, method])
+}
+
+model HeldCart {
+  id        String   @id @default(uuid())
+  branchId  String
+  cashierId String
+  cartData  Json
+  status    String   @default("PENDING") // PENDING, RESUMED, CANCELLED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId, cashierId, status])
+}
+
+model SaleReturn {
+  id             String           @id @default(uuid())
+  returnNumber   String           @unique
+  originalSaleId String
+  originalSale   Sale             @relation(fields: [originalSaleId], references: [id])
+  branchId       String
+  branch         Branch           @relation(fields: [branchId], references: [id])
+  cashierId      String
+  shiftId        String?
+  shift          Shift?           @relation(fields: [shiftId], references: [id])
+  reason         String?
+  totalRefund    Decimal          @db.Decimal(12, 2)
+  refundMethod   PaymentMethod
+  createdBy      String?
+  items          SaleReturnItem[]
+  createdAt      DateTime         @default(now())
+
+  @@index([originalSaleId, branchId])
+}
+
+model SaleReturnItem {
+  id           String          @id @default(uuid())
+  saleReturnId String
+  saleReturn   SaleReturn      @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
+  saleItemId   String
+  saleItem     SaleItem        @relation(fields: [saleItemId], references: [id])
+  batchId      String
+  batch        Batch           @relation(fields: [batchId], references: [id])
+  quantity     Int             // بالوحدة المحددة
+  multiplier   Int             @default(1)
+  baseQuantity Int             @default(0) // quantity * multiplier
+  unitPrice    Decimal         @db.Decimal(12, 2)
+  costPrice    Decimal?        @db.Decimal(12, 4)
+  refundAmount Decimal         @db.Decimal(12, 2)
+  condition    ReturnCondition @default(RESTOCKABLE)
+  isDamaged    Boolean         @default(false)
+
+  @@index([saleReturnId])
+  @@index([saleItemId])
+  @@index([batchId])
+}
+
+model PurchaseReturn {
+  id              String               @id @default(uuid())
+  returnNumber    String               @unique
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder        @relation(fields: [purchaseOrderId], references: [id])
+  supplierId      String
+  supplier        Supplier             @relation(fields: [supplierId], references: [id])
+  branchId        String
+  branch          Branch               @relation(fields: [branchId], references: [id])
+  totalRefund     Decimal              @db.Decimal(12, 4)
+  reason          String?
+  returnedBy      String               // userId
+  items           PurchaseReturnItem[]
+  createdAt       DateTime             @default(now())
+
+  @@index([purchaseOrderId])
+  @@index([supplierId, branchId, createdAt])
+}
+
+model PurchaseReturnItem {
+  id               String         @id @default(uuid())
+  purchaseReturnId String
+  purchaseReturn   PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+  purchaseItemId   String
+  purchaseItem     PurchaseItem   @relation(fields: [purchaseItemId], references: [id])
+  batchId          String
+  batch            Batch          @relation(fields: [batchId], references: [id])
+  unitType         UnitType
+  multiplier       Int
+  quantity         Int
+  baseQuantity     Int
+  unitCostPrice    Decimal        @db.Decimal(12, 4)
+  baseCostPrice    Decimal        @db.Decimal(12, 4)
+  totalCost        Decimal        @db.Decimal(12, 4)
+
+  @@index([purchaseReturnId])
+  @@index([purchaseItemId])
+  @@index([batchId])
+}
+
+// ------------------- 9. المحاسبة العامة (Double-Entry) -------------------
+enum AccountType {
+  ASSET     // أصول (الصندوق، البنك، المخزون، مدينون)
+  LIABILITY // خصوم (موردون، دائنون)
+  EQUITY    // حقوق ملكية
+  REVENUE   // إيرادات المبيعات
+  EXPENSE   // مصروفات (تكلفة البضاعة المباعة، عجز الصندوق)
+}
+
+enum EntryStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+model Account {
+  id          String        @id @default(uuid())
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId    String?       // اختياري: لعزل الحسابات حسب الفرع
+  branch      Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  code        String        // رقم الحساب (مثال: 1-100-01)
+  name        String
+  type        AccountType
+  level       Int           @default(1) // 1: رئيسي، 2: فرعي، 3: تفصيلي، 4: تحليلي، 5: تشغيلي
+
+  // العلاقة الهرمية (الأب والأبناء)
+  parentId    String?
+  parent      Account?      @relation("AccountHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children    Account[]     @relation("AccountHierarchy")
+
+  isLeaf      Boolean       @default(true) // الحسابات الطرفية فقط يُقيد عليها
+  isActive    Boolean       @default(true) // تعطيل الحساب دون حذفه (للحفاظ على السلامة التاريخية)
+  balance     Decimal       @default(0) @db.Decimal(14, 2) // الرصيد التراكمي (يُحدث آلياً)
+
+  lines       JournalLine[]
+  expenses    Expense[]
+  openingBalanceItems OpeningBalanceItem[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @default(now()) @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId, type, level])
+  @@index([parentId])
+}
+
+model JournalEntry {
+  id          String        @id @default(uuid())
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId    String?
+  branch      Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  entryNumber String        // رقم القيد (مثال: JV-2026-0001)
+  date        DateTime      @default(now())
+  description String        // شرح القيد / البيان
+  referenceId String?       // معرف الفاتورة أو أمر الشراء أو الوردية
+  source      String        // 'PURCHASE' | 'SALE' | 'SHIFT_DIFFERENCE' | 'MANUAL'
+  createdBy   String?       // معرف المستخدم الذي أنشأ القيد (للتتبع)
+  createdAt   DateTime      @default(now())
+
+  lines          JournalLine[]
+  openingBalance OpeningBalance?
+
+  @@index([companyId, date, source])
+  @@index([referenceId])
+}
+
+model JournalLine {
+  id             String       @id @default(uuid())
+  journalEntryId String
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        Account      @relation(fields: [accountId], references: [id])
+  debit          Decimal      @default(0) @db.Decimal(12, 2)
+  credit         Decimal      @default(0) @db.Decimal(12, 2)
+  notes          String?
+  description    String?
+
+  // الربط الاختياري مع الحسابات الفرعية (Subledger)
+  customerId     String?
+  customer       Customer?    @relation(fields: [customerId], references: [id])
+  supplierId     String?
+  supplier       Supplier?    @relation(fields: [supplierId], references: [id])
+
+  @@index([accountId, journalEntryId])
+  @@index([customerId])
+  @@index([supplierId])
+}
+
+model BranchAccountMapping {
+  id                 String   @id @default(uuid())
+  branchId           String   @unique
+  branch             Branch   @relation(fields: [branchId], references: [id])
+  cashAccountId      String   // حساب نقدية الصندوق
+  bankAccountId      String   // حساب البنك
+  inventoryAccountId String   // حساب المخزون
+  salesAccountId     String   // حساب إيرادات المبيعات
+  cogsAccountId      String   // حساب تكلفة البضاعة المباعة
+  arAccountId        String   // حساب العملاء (الذمم المدينة)
+  apAccountId        String   // حساب الموردين (الذمم الدائنة)
+  shortageAccountId  String   // حساب عجز الصندوق
+  surplusAccountId   String   // حساب زيادة الصندوق
+}
+
+// ------------------- 10. صندوق الصادر المحاسبي (Transactional Outbox) -------------------
+model AccountingOutbox {
+  id          String    @id @default(uuid())
+  eventType   String    // SALE_COMPLETED, SHIFT_CLOSED, PURCHASE_RECEIVED, SALE_RETURNED
+  payload     Json      // البيانات الخام للحدث
+  status      String    @default("PENDING") // PENDING, PROCESSING, PROCESSED, FAILED
+  retryCount  Int       @default(0)
+  error       String?
+  processedAt DateTime?
+  processedBy String?   // 'instant-emit' أو 'cron-worker'
+  createdAt   DateTime  @default(now())
+
+  @@index([status, createdAt])
+  @@index([eventType, status])
+}
+
+// ------------------- 11. إدارة المستخدمين والصلاحيات (RBAC) -------------------
+enum Role {
+  SUPER_ADMIN   // مدير النظام العام
+  COMPANY_ADMIN // مدير الشركة
+  BRANCH_MANAGER// مدير الفرع
+  CASHIER       // كاشير / صيدلي بيع
+  ACCOUNTANT    // محاسب
+  INVENTORY     // أمين مخزن
+}
+
+model User {
+  id           String    @id @default(uuid())
+  companyId    String
+  branchId     String?   // اختياري لمديري الشركات، إلزامي لموظفي الفروع
+  name         String
+  username     String    @unique
+  email        String?   @unique
+  passwordHash String
+  role         Role      @default(CASHIER)
+  phone        String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branch       Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  shifts       Shift[]
+  invoices     SalesInvoice[]
+  createdExpenses Expense[] @relation("ExpenseCreator")
+  createdCounts     StockCount[] @relation("CreatedCounts")
+  countedCounts     StockCount[] @relation("CountedCounts")
+  reconciledCounts  StockCount[] @relation("ReconciledCounts")
+  approvedCounts    StockCount[] @relation("ApprovedCounts")
+  createdOpeningBalances OpeningBalance[] @relation("OpeningBalanceCreatedBy")
+  postedOpeningBalances  OpeningBalance[] @relation("OpeningBalancePostedBy")
+
+  @@index([companyId])
+  @@index([branchId])
+}
+
+// ------------------- 12. المصروفات وسندات الصرف -------------------
+enum ExpenseStatus {
+  PENDING   // بانتظار اعتماد المدير
+  APPROVED  // تم الاعتماد والصرف
+  REJECTED  // مرفوض
+}
+
+enum ExpensePaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CHEQUE
+}
+
+model Expense {
+  id              String               @id @default(uuid())
+  companyId       String
+  company         Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId        String
+  branch          Branch               @relation(fields: [branchId], references: [id])
+  shiftId         String?              // ربط المصروف بالوردية (للخروج من درج الكاشير)
+  shift           Shift?               @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+
+  expenseNumber   String               // رقم السند (EXP-2026-00001)
+  date            DateTime             @default(now())
+  expenseType     String               // نوع المصروف (نثريات، كهرباء، إيجار...)
+  accountId       String               // الحساب المحاسبي التابع له في الشجرة (يجب أن يكون طرفي isLeaf)
+  account         Account              @relation(fields: [accountId], references: [id])
+
+  amount          Decimal              @db.Decimal(12, 2)
+  paidFrom        String               // 'CASH' (خزينة/درج) | 'BANK' (حساب بنكي)
+  paymentMethod   ExpensePaymentMethod @default(CASH)
+  referenceNo     String?              // رقم الشيك أو إشعار التحويل البنكي
+  description     String?              // البيان / التفاصيل
+  attachment      String?              // رابط أو مسار صورة الفاتورة الورقية
+
+  status          ExpenseStatus        @default(PENDING)
+  approvedBy      String?              // معرف المدير الذي اعتمد الصرف
+  approvedAt      DateTime?
+  rejectionReason String?              // سبب الرفض إن وجد
+
+  createdBy       String               // معرف الموظف الذي أدخل السند
+  creator         User                 @relation("ExpenseCreator", fields: [createdBy], references: [id])
+
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@unique([branchId, expenseNumber])
+  @@index([companyId, branchId, status])
+  @@index([shiftId])
+  @@index([date])
+}
+
+// ------------------- 13. التسلسل الذري للوثائق (Document Sequence) -------------------
+model DocumentSequence {
+  id        String   @id @default(uuid())
+  type      String   // 'RETURN', 'SALE', 'INVOICE', etc.
+  year      Int
+  branchId  String
+  lastValue Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([type, year, branchId], name: "type_year_branchId")
+  @@index([type, year, branchId])
+}
+
+// ------------------- 14. الجرد والتسويات المخزنية (Stock Count & Audit) -------------------
+
+enum StockCountStatus {
+  DRAFT
+  IN_PROGRESS
+  RECONCILED
+  APPROVED
+  CANCELLED
+}
+
+enum StockCountType {
+  FULL
+  PARTIAL
+}
+
+model StockCount {
+  id                String             @id @default(uuid())
+  companyId         String
+  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId          String
+  branch            Branch             @relation(fields: [branchId], references: [id])
+  countNumber       String             @unique // SC-YYYY-XXXXX
+  status            StockCountStatus   @default(DRAFT)
+  countType         StockCountType     @default(FULL)
+
+  // سلسلة التدقيق الرباعية (Audit Trail)
+  startedAt         DateTime           @default(now())
+  createdById       String
+  createdBy         User               @relation("CreatedCounts", fields: [createdById], references: [id])
+
+  countedAt         DateTime?
+  countedById       String?
+  countedBy         User?              @relation("CountedCounts", fields: [countedById], references: [id])
+
+  reconciledAt      DateTime?
+  reconciledById    String?
+  reconciledBy      User?              @relation("ReconciledCounts", fields: [reconciledById], references: [id])
+
+  approvedAt        DateTime?
+  approvedById      String?
+  approvedBy        User?              @relation("ApprovedCounts", fields: [approvedById], references: [id])
+
+  completedAt       DateTime?
+  cancelReason      String?
+
+  // القيم المالية (بدقة عشرية عالية)
+  totalShortage     Decimal            @default(0) @db.Decimal(14, 2)
+  totalSurplus      Decimal            @default(0) @db.Decimal(14, 2)
+  netVarianceValue  Decimal            @default(0) @db.Decimal(14, 2)
+
+  notes             String?
+  items             StockCountItem[]
+  frozenBatches     Batch[]            @relation("BatchFrozenByStockCount")
+
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([companyId, branchId, status])
+  @@index([countNumber])
+  @@index([status, startedAt])
+}
+
+model StockCountItem {
+  id                String      @id @default(uuid())
+  stockCountId      String
+  stockCount        StockCount  @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+  batchId           String
+  batch             Batch       @relation(fields: [batchId], references: [id])
+  systemQty         Int         // اللقطة الدفترية لحظة البدء
+  actualQty         Int?        // العد الفعلي
+  variance          Int         @default(0) // actualQty - systemQty
+  unitCost          Decimal     @default(0) @db.Decimal(12, 4)
+  totalCostVariance Decimal     @default(0) @db.Decimal(14, 2)
+  notes             String?
+  countedAt         DateTime?
+
+  @@unique([stockCountId, batchId])
+  @@index([stockCountId])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId    String?
+  userId      String
+  action      String   // STOCK_COUNT_STARTED, STOCK_COUNT_APPROVED, ...
+  entityType  String   // StockCount, StockCountItem, Batch
+  entityId    String
+  changes     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([companyId, entityType, entityId])
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+}
+
+
+
+
+
+
+// ------------------- 14. الأرصدة الافتتاحية (Opening Balance) -------------------
+enum OpeningBalanceStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+model OpeningBalance {
+  id             String                @id @default(uuid())
+  companyId      String
+  company        Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId       String
+  branch         Branch                @relation(fields: [branchId], references: [id])
+  documentNumber String                @unique // OB-YYYY-XXXXX
+  effectiveDate  DateTime              @default(now())
+  status         OpeningBalanceStatus  @default(DRAFT)
+  totalDebit     Decimal               @default(0) @db.Decimal(14, 2)
+  totalCredit    Decimal               @default(0) @db.Decimal(14, 2)
+  difference     Decimal               @default(0) @db.Decimal(14, 2)
+  journalEntryId String?               @unique
+  journalEntry   JournalEntry?         @relation(fields: [journalEntryId], references: [id])
+  postedAt       DateTime?
+  cancelReason   String?
+  notes          String?
+  createdById    String?
+  createdBy      User?                 @relation("OpeningBalanceCreatedBy", fields: [createdById], references: [id])
+  postedById     String?
+  postedBy       User?                 @relation("OpeningBalancePostedBy", fields: [postedById], references: [id])
+  items          OpeningBalanceItem[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @default(now()) @updatedAt
+
+  @@index([companyId, branchId, status])
+}
+
+model OpeningBalanceItem {
+  id               String         @id @default(uuid())
+  openingBalanceId String
+  openingBalance   OpeningBalance @relation(fields: [openingBalanceId], references: [id], onDelete: Cascade)
+  accountId        String
+  account          Account        @relation(fields: [accountId], references: [id])
+  debit            Decimal        @default(0) @db.Decimal(14, 2)
+  credit           Decimal        @default(0) @db.Decimal(14, 2)
+  description      String?
+  referenceType    String?        // 'BATCH' | 'CASH' | 'CUSTOMER' | 'SUPPLIER' | 'FIXED_ASSET' | 'LOAN' | 'CAPITAL'
+  referenceId      String?
+
+  @@index([openingBalanceId])
+  @@index([accountId])
+}

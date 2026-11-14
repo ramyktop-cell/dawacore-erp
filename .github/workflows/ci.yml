@@ -1,0 +1,118 @@
+name: DawaCore CI/CD
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 22.x
+  PUPPETEER_SKIP_DOWNLOAD: true
+
+jobs:
+  quality:
+    name: Backend quality and security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npx prisma generate
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - run: npm run build
+      - name: Security regression tests
+        run: npm run test:security -- --runInBand
+
+  integration:
+    name: Backend integration tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: dawacore_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd="pg_isready -U test -d dawacore_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npx prisma generate
+      - name: Configure isolated test environment
+        shell: bash
+        run: |
+          cat > .env.test <<'EOF'
+          DATABASE_URL=postgresql://test:test@127.0.0.1:5433/dawacore_test
+          JWT_SECRET=ci-only-test-secret-change-per-run
+          NODE_ENV=test
+          DISABLE_BACKGROUND_JOBS=true
+          EOF
+      - run: npm run db:test:push
+      - run: npm test -- --runInBand
+
+  frontend:
+    name: Frontend build and audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run build
+
+  package:
+    name: Package release artifact
+    needs: [quality, integration, frontend]
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npx prisma generate
+      - run: npm run build
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+      - name: Create release bundle
+        run: |
+          tar -czf "dawacore-${GITHUB_SHA}.tar.gz" \
+            dist frontend/dist prisma package.json package-lock.json nest-cli.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dawacore-${{ github.sha }}
+          path: dawacore-${{ github.sha }}.tar.gz
+          retention-days: 14

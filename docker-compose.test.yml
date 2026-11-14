@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  postgres-test:
+    image: postgres:15-alpine
+    container_name: dawacore-test-db
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: dawacore_test
+    ports:
+      - "5433:5432" # منفذ مختلف عن التطوير
+    tmpfs:
+      - /var/lib/postgresql/data # ✅ في الذاكرة - سريع + لا يحفظ بيانات
