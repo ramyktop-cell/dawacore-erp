@@ -13,25 +13,29 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
 
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV NPM_CONFIG_PRODUCTION=false
 
 # 1. Install Backend dependencies
 COPY package*.json ./
 COPY prisma ./prisma/
 COPY scripts ./scripts/
-RUN npm ci --include=dev --no-audit --no-fund
+RUN npm install --include=dev --no-audit --no-fund
 
-# 2. Install Frontend dependencies & build Frontend SPA (frontend/dist)
+# 2. Install Frontend dependencies
 COPY frontend/package*.json ./frontend/
-RUN npm --prefix frontend ci --include=dev --no-audit --no-fund
-COPY frontend ./frontend/
-RUN npm --prefix frontend run build
+RUN npm --prefix frontend install --include=dev --no-audit --no-fund
 
-# 3. Copy Backend source, generate Prisma Client, and build NestJS (dist/)
+# 3. Copy Backend + Frontend source (frontend imports src/shared/scale-core.ts)
 COPY tsconfig*.json nest-cli.json ./
 COPY assets ./assets/
 COPY tools ./tools/
 COPY src ./src/
-RUN npx prisma generate && npm run build
+COPY frontend ./frontend/
+
+# 4. Generate Prisma Client, build Backend (dist/), and build Frontend SPA (frontend/dist/)
+RUN npx prisma generate \
+    && npm run build \
+    && npm --prefix frontend run build
 
 # ==============================================================================
 # Stage 2: Production Runner (Lightweight 512MB-Friendly Runtime)
@@ -59,7 +63,7 @@ COPY prisma ./prisma/
 COPY scripts ./scripts/
 COPY tools ./tools/
 
-RUN npm ci --omit=dev --no-audit --no-fund \
+RUN npm install --omit=dev --no-audit --no-fund \
     && npm install --no-save prisma@^5.22.0 \
     && npx prisma generate \
     && npm cache clean --force
