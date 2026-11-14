@@ -1,6 +1,8 @@
-# Ignore dependencies and build artifacts
+# Ignore dependencies and local build artifacts
 node_modules
 dist
+frontend/node_modules
+frontend/dist
 coverage
 .git
 .gitignore
@@ -9,16 +11,23 @@ coverage
 !.env.example
 !.env.production.example
 
-# Ignore frontend folder in backend build context
-frontend
-
-# Ignore logs, backups and temporary test files
+# Ignore local packages, installers, logs, backups and temporary test files
+installer_package
+DawaCore-Clean-*
+*.zip
+*.exe
+*.dump
+*.sql
+*.pdf
+*.xlsx
 *.log
 npm-debug.log*
 backups
+scratch
+workflow-history
+تهيئة
 .vscode
 .idea
 README.md
 SYSTEM_STATUS.md
 docker-compose*.yml
-Dockerfile*
