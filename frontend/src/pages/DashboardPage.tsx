@@ -87,25 +87,25 @@ export const DashboardPage: React.FC = () => {
   }, [data?.expenseChart]);
 
   return (
-    <div className="p-3 sm:p-6 max-w-7xl mx-auto space-y-5 sm:space-y-6" dir="rtl">
+    <div className="p-2.5 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4" dir="rtl">
       {/* Header */}
       <PageHeader
-        title="لوحة تحكم المدير ودعم القرار (DSS & Executive Dashboard)"
+        title="لوحة تحكم المدير ودعم القرار"
         subtitle="المتابعة الذكية للمبيعات، النواقص، قرارات التوريد والتصفية، والسيولة النقدية"
         action={
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-2xs">
-              <Calendar size={15} className="text-slate-400" />
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1 shadow-2xs">
+              <Calendar size={14} className="text-slate-400" />
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="text-xs font-bold text-slate-700 focus:outline-none bg-transparent"
+                className="text-[11px] font-bold text-slate-700 focus:outline-none bg-transparent"
               />
             </div>
             <button
               onClick={() => navigate('/pos')}
-              className="flex items-center gap-2 rounded-xl bg-[#00A8A8] hover:bg-[#009292] text-white px-4 py-2 text-xs font-bold shadow-md transition"
+              className="flex items-center gap-1.5 rounded-xl bg-[#00A8A8] hover:bg-[#009292] text-white px-3 py-1.5 text-[11px] font-bold shadow-xs transition"
               title="الانتقال لنقطة البيع الفورية (F4)"
             >
               <span>🛒</span>
@@ -118,10 +118,10 @@ export const DashboardPage: React.FC = () => {
                 refetchSecurityAlerts();
               }}
               disabled={isFetching || isDssFetching}
-              className="flex items-center gap-2 rounded-xl bg-[#582949] hover:bg-[#431f38] text-white px-4 py-2 text-xs font-bold shadow-md transition disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-xl bg-[#582949] hover:bg-[#431f38] text-white px-3 py-1.5 text-[11px] font-bold shadow-xs transition disabled:opacity-50"
             >
-              <RefreshCw size={14} className={isFetching || isDssFetching ? 'animate-spin' : ''} />
-              <span>تحديث البيانات والتحليلات</span>
+              <RefreshCw size={13} className={isFetching || isDssFetching ? 'animate-spin' : ''} />
+              <span>تحديث</span>
             </button>
           </div>
         }
@@ -227,50 +227,50 @@ export const DashboardPage: React.FC = () => {
       {/* 🧠 مركز دعم اتخاذ القرارات الذكي (EXECUTIVE DECISION SUPPORT SYSTEM - DSS) */}
       {/* ========================================================================= */}
 
-      <div className="bg-white rounded-3xl p-5 sm:p-7 text-slate-800 shadow-md border border-slate-200/90 relative overflow-hidden">
+      <div className="bg-white rounded-2xl p-3.5 sm:p-4 text-slate-800 shadow-sm border border-slate-200/90 relative overflow-hidden">
         {/* شريط علوي متدرج مطابق لتصميم الهوية */}
-        <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-[#00A8A8] via-emerald-400 to-amber-400" />
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-[#00A8A8] via-emerald-400 to-amber-400" />
 
-        {/* رأس قسم دعم القرار */}
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-start justify-between gap-4 pb-4 pt-1">
+        {/* رأس قسم دعم القرار (مضغوط ومتوافق مع الجوال والتابلت) */}
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pb-2.5 pt-0.5">
           {/* العنوان والأيقونة (يمين) */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-3.5">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#0D9488] to-[#0F766E] text-white shadow-md shadow-teal-600/20 flex items-center justify-center shrink-0">
-                <BrainCircuit size={28} />
-              </div>
-              <div>
-                <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-800 leading-tight">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0D9488] to-[#0F766E] text-white shadow-xs flex items-center justify-center shrink-0">
+              <BrainCircuit size={20} />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-800 leading-tight">
                   مركز دعم اتخاذ القرار
                 </h2>
-                <div className="text-xs font-semibold text-slate-500 tracking-wide">
+                <span className="text-[10px] font-semibold text-slate-400 hidden sm:inline">
                   Executive Decision Hub
-                </div>
-                <span className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-bold bg-[#E6F7F5] text-[#0F766E] px-3 py-0.5 rounded-full border border-teal-200/80">
-                  <Package size={12} />
+                </span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-[#E6F7F5] text-[#0F766E] px-2 py-0.5 rounded-full border border-teal-200/80">
+                  <Package size={10} />
                   <span>محرك التحليل الاستباقي (DSS)</span>
                 </span>
               </div>
+              <p className="text-[11px] font-medium text-slate-500 mt-0.5">
+                توصيات تشغيلية مدعومة بتحليل بيانات لحماية الأرباح، تسريع دورة المخزون، وتقليل المخزون الراكد.
+              </p>
             </div>
-            <p className="text-xs font-semibold text-slate-500">
-              توصيات تشغيلية مدعومة بتحليل بيانات لحماية الأرباح، تسريع دورة المخزون، وتقليل المخزون الراكد.
-            </p>
           </div>
 
-          {/* أزرار التبويبات والفلترة (يسار) */}
-          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+          {/* أزرار التبويبات والفلترة (يسار - مضغوطة لتناسب التلفون والتابلت) */}
+          <div className="flex flex-wrap items-center gap-1.5 lg:justify-end">
             <button
               onClick={() => setActiveDssTab('REORDER')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer border ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer border ${
                 activeDssTab === 'REORDER'
-                  ? 'bg-[#0F766E] text-white border-[#0F766E] shadow-xs'
+                  ? 'bg-[#0F766E] text-white border-[#0F766E] shadow-2xs'
                   : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
               }`}
             >
-              <Zap size={14} />
+              <Zap size={12} />
               <span>قرارات الشراء وإعادة الطلب</span>
               {dssData?.executiveSummary?.urgentReorders ? (
-                <span className="bg-rose-500 text-white text-[10px] font-mono px-1.5 py-0.2 rounded-full">
+                <span className="bg-rose-500 text-white text-[9px] font-mono px-1.5 rounded-full">
                   {dssData.executiveSummary.urgentReorders}
                 </span>
               ) : null}
@@ -278,16 +278,16 @@ export const DashboardPage: React.FC = () => {
 
             <button
               onClick={() => setActiveDssTab('EXPIRY')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer border ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer border ${
                 activeDssTab === 'EXPIRY'
-                  ? 'bg-[#0F766E] text-white border-[#0F766E] shadow-xs'
+                  ? 'bg-[#0F766E] text-white border-[#0F766E] shadow-2xs'
                   : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
               }`}
             >
-              <TrendingDown size={14} />
+              <TrendingDown size={12} />
               <span>تصفية الصلاحيات والخصومات</span>
               {dssData?.executiveSummary?.criticalExpiryBatches ? (
-                <span className="bg-rose-500 text-white text-[10px] font-mono px-1.5 py-0.2 rounded-full">
+                <span className="bg-rose-500 text-white text-[9px] font-mono px-1.5 rounded-full">
                   {dssData.executiveSummary.criticalExpiryBatches}
                 </span>
               ) : null}
@@ -295,16 +295,16 @@ export const DashboardPage: React.FC = () => {
 
             <button
               onClick={() => setActiveDssTab('DEAD_STOCK')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer border ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer border ${
                 activeDssTab === 'DEAD_STOCK'
-                  ? 'bg-[#0F766E] text-white border-[#0F766E] shadow-xs'
+                  ? 'bg-[#0F766E] text-white border-[#0F766E] shadow-2xs'
                   : 'bg-slate-100/90 text-slate-700 border-slate-200 hover:bg-slate-200/70'
               }`}
             >
-              <Layers size={14} />
+              <Layers size={12} />
               <span>رأس المال المجمد (راكد)</span>
               {dssData?.executiveSummary?.deadItemsCount ? (
-                <span className="bg-violet-700 text-white text-[10px] font-mono px-1.5 py-0.2 rounded-full">
+                <span className="bg-violet-700 text-white text-[9px] font-mono px-1.5 rounded-full">
                   {dssData.executiveSummary.deadItemsCount}
                 </span>
               ) : null}
@@ -312,35 +312,35 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* كروت المؤشرات الاستراتيجية الـ 3 بالتصميم المطابق للصورة */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-4 relative z-10">
+        {/* كروت المؤشرات الاستراتيجية الـ 3 بحجم مضغوط أنيق يناسب التابلت والتلفون */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 my-2.5 relative z-10">
           {/* كارت 1 (يمين): أصناف مهددة بالنفاد (تركواز / أخضر) */}
           <div
             role="button"
             tabIndex={0}
             onClick={() => setActiveDssTab('REORDER')}
-            className="relative overflow-hidden bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer flex flex-col justify-between"
+            className="relative overflow-hidden bg-white border border-slate-200/90 rounded-xl p-3 shadow-2xs hover:shadow-sm transition cursor-pointer flex flex-col justify-between"
           >
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-teal-500 to-emerald-400" />
-            <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex items-start justify-between gap-2 mb-2">
               <div>
-                <div className="text-xs sm:text-sm font-bold text-slate-700">
+                <div className="text-[11px] sm:text-xs font-bold text-slate-700">
                   أصناف مهددة بالنفاد (قبل 7 أيام)
                 </div>
-                <div className="mt-2.5 pr-3 border-r-3 border-teal-500 flex items-baseline gap-1.5">
-                  <span className="text-2xl sm:text-3xl font-black font-mono text-slate-900">
+                <div className="mt-1 pr-2.5 border-r-3 border-teal-500 flex items-baseline gap-1">
+                  <span className="text-lg sm:text-xl font-black font-mono text-slate-900">
                     {dssData?.executiveSummary?.urgentReorders || 0}
                   </span>
-                  <span className="text-lg sm:text-xl font-black text-slate-800">أصناف</span>
+                  <span className="text-xs sm:text-sm font-black text-slate-800">أصناف</span>
                 </div>
               </div>
-              <div className="w-11 h-11 rounded-full bg-[#E6F7F5] text-teal-600 flex items-center justify-center shrink-0">
-                <Zap size={20} />
+              <div className="w-8 h-8 rounded-full bg-[#E6F7F5] text-teal-600 flex items-center justify-center shrink-0">
+                <Zap size={15} />
               </div>
             </div>
-            <div className="bg-[#EAF8F6] text-teal-950 rounded-xl px-3.5 py-2.5 text-[11px] font-semibold flex items-center justify-between gap-2">
-              <Package size={16} className="text-teal-600 shrink-0" />
-              <span className="leading-relaxed">
+            <div className="bg-[#EAF8F6] text-teal-950 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold flex items-center justify-between gap-1.5">
+              <Package size={13} className="text-teal-600 shrink-0" />
+              <span className="leading-snug truncate">
                 محسوبة بناءً على سرعة الاستهلاك الفعلي لآخر 30 يوماً.
               </span>
             </div>
@@ -351,28 +351,28 @@ export const DashboardPage: React.FC = () => {
             role="button"
             tabIndex={0}
             onClick={() => setActiveDssTab('EXPIRY')}
-            className="relative overflow-hidden bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer flex flex-col justify-between"
+            className="relative overflow-hidden bg-white border border-slate-200/90 rounded-xl p-3 shadow-2xs hover:shadow-sm transition cursor-pointer flex flex-col justify-between"
           >
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-amber-500 to-amber-300" />
-            <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex items-start justify-between gap-2 mb-2">
               <div>
-                <div className="text-xs sm:text-sm font-bold text-slate-700">
+                <div className="text-[11px] sm:text-xs font-bold text-slate-700">
                   الخسارة المالية المهددة بالتلف
                 </div>
-                <div className="mt-2.5 pr-3 border-r-3 border-amber-400 flex items-baseline gap-1.5">
-                  <span className="text-2xl sm:text-3xl font-black font-mono text-slate-900">
+                <div className="mt-1 pr-2.5 border-r-3 border-amber-400 flex items-baseline gap-1">
+                  <span className="text-lg sm:text-xl font-black font-mono text-slate-900">
                     {(dssData?.executiveSummary?.totalPotentialLoss || 0).toLocaleString()}
                   </span>
-                  <span className="text-base sm:text-lg font-black text-slate-800">ج.س</span>
+                  <span className="text-xs sm:text-sm font-black text-slate-800">ج.س</span>
                 </div>
               </div>
-              <div className="w-11 h-11 rounded-full bg-[#FEF3C7] text-amber-600 flex items-center justify-center shrink-0">
-                <TrendingDown size={20} />
+              <div className="w-8 h-8 rounded-full bg-[#FEF3C7] text-amber-600 flex items-center justify-center shrink-0">
+                <TrendingDown size={15} />
               </div>
             </div>
-            <div className="bg-[#FFF6E5] text-amber-950 rounded-xl px-3.5 py-2.5 text-[11px] font-semibold flex items-center justify-between gap-2">
-              <AlertTriangle size={16} className="text-amber-600 shrink-0" />
-              <span className="leading-relaxed">
+            <div className="bg-[#FFF6E5] text-amber-950 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold flex items-center justify-between gap-1.5">
+              <AlertTriangle size={13} className="text-amber-600 shrink-0" />
+              <span className="leading-snug truncate">
                 تصفيتها فوراً بالخصومات المقترحة قبل انتهاء الصلاحية.
               </span>
             </div>
@@ -383,65 +383,65 @@ export const DashboardPage: React.FC = () => {
             role="button"
             tabIndex={0}
             onClick={() => setActiveDssTab('DEAD_STOCK')}
-            className="relative overflow-hidden bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition cursor-pointer flex flex-col justify-between"
+            className="relative overflow-hidden bg-white border border-slate-200/90 rounded-xl p-3 shadow-2xs hover:shadow-sm transition cursor-pointer flex flex-col justify-between"
           >
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-purple-600 to-violet-400" />
-            <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex items-start justify-between gap-2 mb-2">
               <div>
-                <div className="text-xs sm:text-sm font-bold text-slate-700">
+                <div className="text-[11px] sm:text-xs font-bold text-slate-700">
                   رأس المال المجمد (بدون حركة 60 يوم)
                 </div>
-                <div className="mt-2.5 pr-3 border-r-3 border-purple-400 flex items-baseline gap-1.5">
-                  <span className="text-2xl sm:text-3xl font-black font-mono text-slate-900">
+                <div className="mt-1 pr-2.5 border-r-3 border-purple-400 flex items-baseline gap-1">
+                  <span className="text-lg sm:text-xl font-black font-mono text-slate-900">
                     {(dssData?.executiveSummary?.totalFrozenCapital || 0).toLocaleString()}
                   </span>
-                  <span className="text-base sm:text-lg font-black text-slate-800">ج.س</span>
+                  <span className="text-xs sm:text-sm font-black text-slate-800">ج.س</span>
                 </div>
               </div>
-              <div className="w-11 h-11 rounded-full bg-[#F3E8FF] text-purple-600 flex items-center justify-center shrink-0">
-                <Layers size={20} />
+              <div className="w-8 h-8 rounded-full bg-[#F3E8FF] text-purple-600 flex items-center justify-center shrink-0">
+                <Layers size={15} />
               </div>
             </div>
-            <div className="bg-[#F5EEFF] text-purple-950 rounded-xl px-3.5 py-2.5 text-[11px] font-semibold flex items-center justify-between gap-2">
-              <BadgePercent size={16} className="text-purple-600 shrink-0" />
-              <span className="leading-relaxed">
+            <div className="bg-[#F5EEFF] text-purple-950 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold flex items-center justify-between gap-1.5">
+              <BadgePercent size={13} className="text-purple-600 shrink-0" />
+              <span className="leading-snug truncate">
                 يوصى بعمل عروض مجمعة (Bundling) أو تحرير السيولة فوراً.
               </span>
             </div>
           </div>
         </div>
 
-        {/* تفاصيل التوصيات التفاعلية بناءً على التبويب المختار */}
-        <div className="relative z-10 bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
+        {/* تفاصيل التوصيات التفاعلية بناءً على التبويب المختار (مضغوطة) */}
+        <div className="relative z-10 bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
           {isDssLoading ? (
-            <div className="p-8 text-center text-slate-500 text-xs font-semibold">
+            <div className="p-4 text-center text-slate-500 text-xs font-semibold">
               جاري تشغيل خوارزميات محرك دعم القرارات ومسح المبيعات التاريخية...
             </div>
           ) : activeDssTab === 'REORDER' ? (
-            <div className="p-4 sm:p-5">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                <span className="flex items-center gap-1.5 text-sm sm:text-base font-black text-slate-800">
-                  <Zap size={18} className="text-amber-500 fill-amber-400" />
+            <div className="p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                <span className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-slate-800">
+                  <Zap size={15} className="text-amber-500 fill-amber-400" />
                   <span>جدول التوصيات الذكية لإعادة الطلب وتفادي نفاد الأصناف</span>
                 </span>
-                <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 border border-slate-200 px-3 py-1.5 rounded-xl text-[11px] font-bold">
-                  <Calendar size={13} className="text-slate-500" />
+                <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 border border-slate-200 px-2.5 py-1 rounded-lg text-[10px] font-bold">
+                  <Calendar size={11} className="text-slate-500" />
                   <span>معدل التغطية المستهدف: 30 يوماً قادمة</span>
                 </span>
               </div>
               {dssData?.reorderRecommendations?.length === 0 ? (
-                <div className="py-10 px-6 text-center bg-gradient-to-b from-slate-50/70 via-teal-50/25 to-emerald-50/40 border border-slate-100 rounded-2xl">
-                  <div className="w-20 h-20 mx-auto mb-3 rounded-full bg-[#E6F7F5] flex items-center justify-center relative">
-                    <Package size={36} className="text-[#0F766E]" />
+                <div className="py-4 px-4 text-center bg-gradient-to-b from-slate-50/70 via-teal-50/25 to-emerald-50/40 border border-slate-100 rounded-xl">
+                  <div className="w-12 h-12 mx-auto mb-1.5 rounded-full bg-[#E6F7F5] flex items-center justify-center relative">
+                    <Package size={22} className="text-[#0F766E]" />
                     <CheckCircle2
-                      size={20}
-                      className="text-emerald-600 bg-white rounded-full absolute bottom-1.5 left-1.5"
+                      size={14}
+                      className="text-emerald-600 bg-white rounded-full absolute bottom-0.5 left-0.5"
                     />
                   </div>
-                  <div className="text-sm sm:text-base font-black text-slate-800">
+                  <div className="text-xs sm:text-sm font-black text-slate-800">
                     كافة الأصناف لديها تغطية مخزنية كافية ولا توجد حالات نفاد وشيكة.
                   </div>
-                  <div className="text-xs text-slate-500 font-semibold mt-1">
+                  <div className="text-[11px] text-slate-500 font-medium mt-0.5">
                     معدل التغطية الحالي يلبي خطة التشغيل ويضمن استمرارية التوريد خلال 30 يوماً قادمة.
                   </div>
                 </div>
@@ -713,34 +713,34 @@ export const DashboardPage: React.FC = () => {
         </div>
       ) : data ? (
         <>
-          {/* ===== 1. بطاقات المؤشرات القيادية السريعة المرتبطة بالتقارير (Interactive KPI Cards) ===== */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          {/* ===== 1. بطاقات المؤشرات القيادية السريعة المرتبطة بالتقارير (مضغوطة للجوال والتابلت) ===== */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5 sm:gap-3">
             {/* 1. مبيعات اليوم -> تقرير المبيعات اليومية */}
             <div
               role="button"
               tabIndex={0}
               onClick={() => navigate('/reports/daily-sales')}
               onKeyDown={(e) => e.key === 'Enter' && navigate('/reports/daily-sales')}
-              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-emerald-50/30 to-emerald-50/70 border border-emerald-200/80 shadow-2xs hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+              className="group relative overflow-hidden p-3 rounded-xl bg-gradient-to-br from-white via-emerald-50/30 to-emerald-50/70 border border-emerald-200/80 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
             >
               <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 to-teal-500" />
               <div>
-                <div className="flex items-center justify-between text-emerald-700 mb-2 mt-0.5">
-                  <span className="text-xs font-black">مبيعات اليوم</span>
-                  <div className="p-2 rounded-xl bg-emerald-100/80 text-emerald-600 group-hover:scale-110 transition-transform">
-                    <TrendingUp size={16} />
+                <div className="flex items-center justify-between text-emerald-700 mb-1">
+                  <span className="text-[11px] font-black">مبيعات اليوم</span>
+                  <div className="p-1.5 rounded-lg bg-emerald-100/80 text-emerald-600">
+                    <TrendingUp size={14} />
                   </div>
                 </div>
-                <p className="text-xl font-black text-slate-800 font-mono tracking-tight">
+                <p className="text-base sm:text-lg font-black text-slate-800 font-mono tracking-tight">
                   {data.summary.salesToday.toLocaleString()}{' '}
                   <span className="text-[10px] font-bold text-slate-500">ج.س</span>
                 </p>
               </div>
-              <div className="mt-3 pt-2 border-t border-emerald-200/60 flex items-center justify-between text-[10px] font-bold text-emerald-700">
-                <span>{data.summary.invoicesCount} فاتورة مصدرة</span>
-                <span className="inline-flex items-center gap-0.5 text-emerald-600 group-hover:translate-x-[-2px] transition-transform">
+              <div className="mt-2 pt-1.5 border-t border-emerald-200/60 flex items-center justify-between text-[10px] font-bold text-emerald-700">
+                <span>{data.summary.invoicesCount} فاتورة</span>
+                <span className="inline-flex items-center gap-0.5 text-emerald-600">
                   <span>تقرير اليوم</span>
-                  <ArrowUpRight size={12} />
+                  <ArrowUpRight size={11} />
                 </span>
               </div>
             </div>
@@ -751,26 +751,26 @@ export const DashboardPage: React.FC = () => {
               tabIndex={0}
               onClick={() => navigate('/sales/invoices')}
               onKeyDown={(e) => e.key === 'Enter' && navigate('/sales/invoices')}
-              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-teal-50/30 to-cyan-50/70 border border-teal-200/80 shadow-2xs hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+              className="group relative overflow-hidden p-3 rounded-xl bg-gradient-to-br from-white via-teal-50/30 to-cyan-50/70 border border-teal-200/80 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
             >
               <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#00A8A8] to-cyan-500" />
               <div>
-                <div className="flex items-center justify-between text-[#00A8A8] mb-2 mt-0.5">
-                  <span className="text-xs font-black">مبيعات الشهر</span>
-                  <div className="p-2 rounded-xl bg-teal-100/80 text-[#00A8A8] group-hover:scale-110 transition-transform">
-                    <ShoppingBag size={16} />
+                <div className="flex items-center justify-between text-[#00A8A8] mb-1">
+                  <span className="text-[11px] font-black">مبيعات الشهر</span>
+                  <div className="p-1.5 rounded-lg bg-teal-100/80 text-[#00A8A8]">
+                    <ShoppingBag size={14} />
                   </div>
                 </div>
-                <p className="text-xl font-black text-slate-800 font-mono tracking-tight">
+                <p className="text-base sm:text-lg font-black text-slate-800 font-mono tracking-tight">
                   {data.summary.salesMonth.toLocaleString()}{' '}
                   <span className="text-[10px] font-bold text-slate-500">ج.س</span>
                 </p>
               </div>
-              <div className="mt-3 pt-2 border-t border-teal-200/60 flex items-center justify-between text-[10px] font-bold text-teal-700">
+              <div className="mt-2 pt-1.5 border-t border-teal-200/60 flex items-center justify-between text-[10px] font-bold text-teal-700">
                 <span>إجمالي الشهر</span>
-                <span className="inline-flex items-center gap-0.5 text-[#00A8A8] group-hover:translate-x-[-2px] transition-transform">
-                  <span>سجل الفواتير</span>
-                  <ArrowUpRight size={12} />
+                <span className="inline-flex items-center gap-0.5 text-[#00A8A8]">
+                  <span>الفواتير</span>
+                  <ArrowUpRight size={11} />
                 </span>
               </div>
             </div>
@@ -781,26 +781,26 @@ export const DashboardPage: React.FC = () => {
               tabIndex={0}
               onClick={() => navigate('/expenses')}
               onKeyDown={(e) => e.key === 'Enter' && navigate('/expenses')}
-              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-rose-50/30 to-pink-50/60 border border-rose-200/80 shadow-2xs hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+              className="group relative overflow-hidden p-3 rounded-xl bg-gradient-to-br from-white via-rose-50/30 to-pink-50/60 border border-rose-200/80 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
             >
               <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-rose-400 to-pink-500" />
               <div>
-                <div className="flex items-center justify-between text-rose-600 mb-2 mt-0.5">
-                  <span className="text-xs font-black">مصروفات اليوم</span>
-                  <div className="p-2 rounded-xl bg-rose-100/80 text-rose-600 group-hover:scale-110 transition-transform">
-                    <Wallet size={16} />
+                <div className="flex items-center justify-between text-rose-600 mb-1">
+                  <span className="text-[11px] font-black">مصروفات اليوم</span>
+                  <div className="p-1.5 rounded-lg bg-rose-100/80 text-rose-600">
+                    <Wallet size={14} />
                   </div>
                 </div>
-                <p className="text-xl font-black text-slate-800 font-mono tracking-tight">
+                <p className="text-base sm:text-lg font-black text-slate-800 font-mono tracking-tight">
                   {(data.summary.expensesToday || 0).toLocaleString()}{' '}
                   <span className="text-[10px] font-bold text-slate-500">ج.س</span>
                 </p>
               </div>
-              <div className="mt-3 pt-2 border-t border-rose-200/60 flex items-center justify-between text-[10px] font-bold text-rose-600">
-                <span>سندات صرف معتمدة</span>
-                <span className="inline-flex items-center gap-0.5 text-rose-600 group-hover:translate-x-[-2px] transition-transform">
-                  <span>سندات الصرف</span>
-                  <ArrowUpRight size={12} />
+              <div className="mt-2 pt-1.5 border-t border-rose-200/60 flex items-center justify-between text-[10px] font-bold text-rose-600">
+                <span>سندات معتمدة</span>
+                <span className="inline-flex items-center gap-0.5 text-rose-600">
+                  <span>المصروفات</span>
+                  <ArrowUpRight size={11} />
                 </span>
               </div>
             </div>
@@ -811,30 +811,30 @@ export const DashboardPage: React.FC = () => {
               tabIndex={0}
               onClick={() => navigate('/shifts')}
               onKeyDown={(e) => e.key === 'Enter' && navigate('/shifts')}
-              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-indigo-50/30 to-sky-50/60 border border-indigo-200/80 shadow-2xs hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+              className="group relative overflow-hidden p-3 rounded-xl bg-gradient-to-br from-white via-indigo-50/30 to-sky-50/60 border border-indigo-200/80 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
             >
               <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-400 to-sky-500" />
               <div>
-                <div className="flex items-center justify-between text-indigo-600 mb-2 mt-0.5">
-                  <span className="text-xs font-black">الوردية النشطة</span>
-                  <div className="p-2 rounded-xl bg-indigo-100/80 text-indigo-600 group-hover:scale-110 transition-transform">
-                    <Clock size={16} />
+                <div className="flex items-center justify-between text-indigo-600 mb-1">
+                  <span className="text-[11px] font-black">الوردية النشطة</span>
+                  <div className="p-1.5 rounded-lg bg-indigo-100/80 text-indigo-600">
+                    <Clock size={14} />
                   </div>
                 </div>
-                <p className="text-sm font-black text-slate-800 truncate">
+                <p className="text-xs sm:text-sm font-black text-slate-800 truncate">
                   {data.activeShift ? data.activeShift.cashier : 'مغلقة حالياً'}
                 </p>
-                <p className="text-[10px] text-indigo-600 mt-1 font-mono font-bold truncate">
+                <p className="text-[10px] text-indigo-600 mt-0.5 font-mono font-bold truncate">
                   {data.activeShift
-                    ? `وردية #${data.activeShift.shiftNumber} (${data.activeShift.expectedCash.toLocaleString()} ج.س)`
-                    : 'لا توجد وردية مفتوحة'}
+                    ? `#${data.activeShift.shiftNumber} (${data.activeShift.expectedCash.toLocaleString()} ج.س)`
+                    : 'لا توجد وردية'}
                 </p>
               </div>
-              <div className="mt-2.5 pt-2 border-t border-indigo-200/60 flex items-center justify-between text-[10px] font-bold text-indigo-600">
-                <span>حركة الصندوق</span>
-                <span className="inline-flex items-center gap-0.5 text-indigo-600 group-hover:translate-x-[-2px] transition-transform">
-                  <span>إدارة الورديات</span>
-                  <ArrowUpRight size={12} />
+              <div className="mt-1.5 pt-1.5 border-t border-indigo-200/60 flex items-center justify-between text-[10px] font-bold text-indigo-600">
+                <span>الصندوق</span>
+                <span className="inline-flex items-center gap-0.5 text-indigo-600">
+                  <span>الورديات</span>
+                  <ArrowUpRight size={11} />
                 </span>
               </div>
             </div>
@@ -845,26 +845,26 @@ export const DashboardPage: React.FC = () => {
               tabIndex={0}
               onClick={() => navigate('/customers')}
               onKeyDown={(e) => e.key === 'Enter' && navigate('/customers')}
-              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-amber-50/35 to-orange-50/60 border border-amber-200/80 shadow-2xs hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+              className="group relative overflow-hidden p-3 rounded-xl bg-gradient-to-br from-white via-amber-50/35 to-orange-50/60 border border-amber-200/80 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
             >
               <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-400 to-orange-500" />
               <div>
-                <div className="flex items-center justify-between text-amber-700 mb-2 mt-0.5">
-                  <span className="text-xs font-black">ديون العملاء (AR)</span>
-                  <div className="p-2 rounded-xl bg-amber-100/80 text-amber-600 group-hover:scale-110 transition-transform">
-                    <Users size={16} />
+                <div className="flex items-center justify-between text-amber-700 mb-1">
+                  <span className="text-[11px] font-black">ديون العملاء (AR)</span>
+                  <div className="p-1.5 rounded-lg bg-amber-100/80 text-amber-600">
+                    <Users size={14} />
                   </div>
                 </div>
-                <p className="text-xl font-black text-slate-800 font-mono tracking-tight">
+                <p className="text-base sm:text-lg font-black text-slate-800 font-mono tracking-tight">
                   {data.summary.totalCustomerDebt.toLocaleString()}{' '}
                   <span className="text-[10px] font-bold text-slate-500">ج.س</span>
                 </p>
               </div>
-              <div className="mt-3 pt-2 border-t border-amber-200/60 flex items-center justify-between text-[10px] font-bold text-amber-700">
-                <span>ذمم مدينة آجلة</span>
-                <span className="inline-flex items-center gap-0.5 text-amber-600 group-hover:translate-x-[-2px] transition-transform">
-                  <span>كشوف العملاء</span>
-                  <ArrowUpRight size={12} />
+              <div className="mt-2 pt-1.5 border-t border-amber-200/60 flex items-center justify-between text-[10px] font-bold text-amber-700">
+                <span>ذمم مدينة</span>
+                <span className="inline-flex items-center gap-0.5 text-amber-600">
+                  <span>العملاء</span>
+                  <ArrowUpRight size={11} />
                 </span>
               </div>
             </div>
@@ -875,26 +875,26 @@ export const DashboardPage: React.FC = () => {
               tabIndex={0}
               onClick={() => navigate('/suppliers')}
               onKeyDown={(e) => e.key === 'Enter' && navigate('/suppliers')}
-              className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-white via-purple-50/30 to-violet-50/60 border border-purple-200/80 shadow-2xs hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+              className="group relative overflow-hidden p-3 rounded-xl bg-gradient-to-br from-white via-purple-50/30 to-violet-50/60 border border-purple-200/80 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between"
             >
               <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-purple-400 to-violet-500" />
               <div>
-                <div className="flex items-center justify-between text-purple-700 mb-2 mt-0.5">
-                  <span className="text-xs font-black">مستحقات الموردين (AP)</span>
-                  <div className="p-2 rounded-xl bg-purple-100/80 text-purple-600 group-hover:scale-110 transition-transform">
-                    <Truck size={16} />
+                <div className="flex items-center justify-between text-purple-700 mb-1">
+                  <span className="text-[11px] font-black">مستحقات الموردين</span>
+                  <div className="p-1.5 rounded-lg bg-purple-100/80 text-purple-600">
+                    <Truck size={14} />
                   </div>
                 </div>
-                <p className="text-xl font-black text-slate-800 font-mono tracking-tight">
+                <p className="text-base sm:text-lg font-black text-slate-800 font-mono tracking-tight">
                   {data.summary.totalSupplierDebt.toLocaleString()}{' '}
                   <span className="text-[10px] font-bold text-slate-500">ج.س</span>
                 </p>
               </div>
-              <div className="mt-3 pt-2 border-t border-purple-200/60 flex items-center justify-between text-[10px] font-bold text-purple-700">
-                <span>ذمم دائنة للموردين</span>
-                <span className="inline-flex items-center gap-0.5 text-purple-600 group-hover:translate-x-[-2px] transition-transform">
-                  <span>حسابات الموردين</span>
-                  <ArrowUpRight size={12} />
+              <div className="mt-2 pt-1.5 border-t border-purple-200/60 flex items-center justify-between text-[10px] font-bold text-purple-700">
+                <span>ذمم دائنة</span>
+                <span className="inline-flex items-center gap-0.5 text-purple-600">
+                  <span>الموردين</span>
+                  <ArrowUpRight size={11} />
                 </span>
               </div>
             </div>
