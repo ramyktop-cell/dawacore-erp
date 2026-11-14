@@ -15,7 +15,7 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV NPM_CONFIG_PRODUCTION=false
 
-# 1. Install Backend dependencies
+# 1. Install Backend dependencies (including devDependencies for building)
 COPY package*.json ./
 COPY prisma ./prisma/
 COPY scripts ./scripts/
@@ -32,10 +32,11 @@ COPY tools ./tools/
 COPY src ./src/
 COPY frontend ./frontend/
 
-# 4. Generate Prisma Client, build Backend (dist/), and build Frontend SPA (frontend/dist/)
+# 4. Generate Prisma Client, build Backend (dist/), build Frontend SPA (frontend/dist/), and prune devDependencies
 RUN npx prisma generate \
     && npm run build \
-    && npm --prefix frontend run build
+    && npm --prefix frontend run build \
+    && npm prune --omit=dev
 
 # ==============================================================================
 # Stage 2: Production Runner (Lightweight 512MB-Friendly Runtime)
@@ -57,18 +58,12 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy package files and install production dependencies + Prisma CLI for schema sync
+# Copy production node_modules (with pre-generated Prisma client & CLI) and runtime files from builder
 COPY package*.json ./
-COPY prisma ./prisma/
-COPY scripts ./scripts/
-COPY tools ./tools/
-
-RUN npm install --omit=dev --no-audit --no-fund \
-    && npm install --no-save prisma@^5.22.0 \
-    && npx prisma generate \
-    && npm cache clean --force
-
-# Copy compiled Backend, compiled Frontend SPA, and static font assets
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/tools ./tools
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/frontend/dist ./frontend/dist
 COPY --from=builder /app/assets ./assets

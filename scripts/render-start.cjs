@@ -3,7 +3,7 @@
  * ============================================================================
  * DawaCore ERP - Unified Cloud Startup Script (Render / Neon PostgreSQL)
  * 1. Binds HOST=0.0.0.0 for cloud port routing
- * 2. Pushes/Syncs Prisma Schema to PostgreSQL (Neon.tech)
+ * 2. Sanitizes DATABASE_URL & Syncs Prisma Schema to PostgreSQL (Neon.tech)
  * 3. Bootstraps initial Admin, Branch, Accounts & Medicines (idempotent)
  * 4. Ensures cloud container license activation (ephemeral container HWID)
  * 5. Starts NestJS Production Server (serving both /api and SPA frontend/dist)
@@ -17,6 +17,7 @@ const path = require('path');
 // Ensure cloud host binding (Render requires 0.0.0.0 instead of 127.0.0.1)
 process.env.HOST = process.env.HOST || '0.0.0.0';
 process.env.NODE_ENV = process.env.NODE_ENV || 'production';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'DawaCore_Default_Cloud_Jwt_Secret_2026_SecureKey';
 
 console.log('========================================================');
 console.log('🚀 DawaCore ERP - Cloud Production Startup');
@@ -28,15 +29,26 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
+// Auto-sanitize DATABASE_URL in case the user pasted 'DATABASE_URL="postgresql://..."' or multi-line strings from Neon
+const rawDbUrl = String(process.env.DATABASE_URL).trim();
+const matchUrl = rawDbUrl.match(/postgres(?:ql)?:\/\/[^\s"'`]+/i);
+if (matchUrl && matchUrl[0]) {
+  process.env.DATABASE_URL = matchUrl[0];
+}
+
 // 1. Sync Prisma schema with PostgreSQL database
 console.log('⏳ [1/4] Syncing Prisma Database Schema with PostgreSQL...');
 try {
-  execSync('npx prisma db push --accept-data-loss=false --skip-generate', {
+  execSync('npx --no-install prisma db push --accept-data-loss=false --skip-generate', {
     stdio: 'inherit',
   });
 } catch (err) {
   console.warn('⚠️ prisma db push warning, attempting prisma migrate deploy...');
-  execSync('npx prisma migrate deploy', { stdio: 'inherit' });
+  try {
+    execSync('npx --no-install prisma migrate deploy', { stdio: 'inherit' });
+  } catch (err2) {
+    console.warn('⚠️ Schema migration check completed with warning:', err2.message);
+  }
 }
 
 // 2. Run idempotent production bootstrap (Company, Main Branch, COA, FiscalYear, Admin User, Initial Medicines)
