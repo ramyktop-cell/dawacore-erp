@@ -950,19 +950,15 @@ export const PosPage: React.FC = () => {
       )}
 
 
-      {/* 1. الشريط العلوي البنفسجي العنابي (Top Header) */}
-      <header className="flex flex-wrap min-h-16 py-2 items-center justify-between gap-2 bg-[#582949] px-3 sm:px-6 text-white shadow-md">
-        {/* أزرار الإجراءات السريعة في الهيدر */}
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          <span className="rounded-md bg-[#00A8A8] px-3 py-1.5 text-xs font-bold shadow-sm animate-pulse">
-            جاهز للمسح
-          </span>
-
-          {/* زر ومؤشر العمل أوفلاين وطابور المزامنة التلقائية */}
+      {/* 1. الشريط العلوي المدمج والأنيق لنقطة البيع (Compact Clean POS Header) */}
+      <header className="flex flex-wrap min-h-12 py-1.5 items-center justify-between gap-2 bg-[#582949] px-3 sm:px-5 text-white shadow-sm shrink-0">
+        {/* القسم الأيمن: الأزرار الأساسية فقط بدون زحام */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* مؤشر الاتصال والمزامنة (مدمج) */}
           <button
             type="button"
             onClick={() => setIsOfflineQueueOpen(true)}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-bold transition shadow-sm cursor-pointer ${
+            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition cursor-pointer ${
               isCurrentlyOffline
                 ? 'bg-amber-500 text-slate-950 hover:bg-amber-400'
                 : offlineState.pendingCount > 0
@@ -972,129 +968,137 @@ export const PosPage: React.FC = () => {
             title="إدارة وضع الأوفلاين والفواتير المحفوظة محلياً"
           >
             {offlineState.isSyncing ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <RefreshCw className="w-3 h-3 animate-spin" />
             ) : isCurrentlyOffline ? (
-              <WifiOff className="w-3.5 h-3.5" />
+              <WifiOff className="w-3 h-3" />
             ) : (
-              <Wifi className="w-3.5 h-3.5" />
+              <Wifi className="w-3 h-3" />
             )}
             <span>
               {isCurrentlyOffline
-                ? 'وضع أوفلاين نشط'
+                ? 'أوفلاين'
                 : offlineState.isSyncing
-                ? 'جاري المزامنة...'
-                : 'متصل (أونلاين)'}
+                ? 'مزامنة...'
+                : 'متصل'}
             </span>
             {offlineState.pendingCount > 0 && (
-              <span className="rounded-full bg-black/30 px-1.5 py-0.2 font-mono text-[10px] text-white">
-                {offlineState.pendingCount} معلقة
+              <span className="rounded-full bg-black/30 px-1.5 font-mono text-[10px] text-white">
+                {offlineState.pendingCount}
               </span>
             )}
           </button>
 
-          {getUserRole() !== 'CASHIER' && (
-            <button
-              onClick={() => (window.location.href = '/dashboard')}
-              className="flex items-center gap-1.5 rounded-md bg-[#00A8A8] px-3.5 py-1.5 text-xs font-bold transition hover:bg-[#009292] shadow-sm"
-            >
-              <span>📊</span> لوحة التحكم
-            </button>
-          )}
-
+          {/* الأزرار اليومية الأساسية للكاشير (تعليق + المعلقة + فاتورة جديدة) */}
           <button
-            onClick={() => window.open('/customer-screen', '_blank', 'width=1024,height=768')}
-            className="flex items-center gap-1.5 rounded-md bg-[#481D3E] px-3.5 py-1.5 text-xs font-semibold hover:bg-[#3D1834] cursor-pointer"
+            onClick={handleHold}
+            className="flex items-center gap-1 rounded-lg bg-[#481D3E] px-2.5 py-1 text-[11px] font-bold hover:bg-[#3D1834] transition cursor-pointer"
+            title="تعليق الفاتورة الحالية مؤقتاً"
           >
-            <span>🖥️</span> شاشة العميل
-          </button>
-
-          <button
-            onClick={() => (window.location.href = '/statement')}
-            className="flex items-center gap-1.5 rounded-md bg-[#00A8A8] px-3.5 py-1.5 text-xs font-bold transition hover:bg-[#009292]"
-          >
-            <span>📊</span> كشف الحساب
-          </button>
-
-          <button className="flex items-center gap-1 rounded-md bg-[#481D3E] px-3 py-1.5 text-xs font-semibold hover:bg-[#3D1834]">
-            <span>🖨️</span> الطابعة
+            <span>⏸️</span>
+            <span>تعليق</span>
           </button>
 
           <button
             onClick={() => setIsResumeOpen(true)}
-            className="flex items-center gap-1 rounded-md bg-[#481D3E] px-3 py-1.5 text-xs font-semibold hover:bg-[#3D1834]"
+            className="flex items-center gap-1 rounded-lg bg-[#481D3E] px-2.5 py-1 text-[11px] font-bold hover:bg-[#3D1834] transition cursor-pointer"
+            title="استعراض الفواتير المعلقة"
           >
-            <span>📋</span> المعلقة
-          </button>
-
-          <button
-            onClick={handleHold}
-            className="flex items-center gap-1 rounded-md bg-[#481D3E] px-3 py-1.5 text-xs font-semibold hover:bg-[#3D1834]"
-          >
-            <span>⏸️</span> تعليق
-          </button>
-
-          <button
-            onClick={() => !isConsoleLocked && items.length > 0 && setIsPaymentOpen(true)}
-            className="flex items-center gap-1 rounded-md bg-[#481D3E] px-4 py-1.5 text-xs font-bold text-teal-300 hover:bg-[#3D1834]"
-          >
-            <span>F4</span> الدفع
+            <span>📋</span>
+            <span>المعلقة</span>
           </button>
 
           <button
             onClick={handleNewInvoice}
-            className="flex items-center gap-1 rounded-md bg-[#481D3E] px-3 py-1.5 text-xs font-semibold hover:bg-[#3D1834]"
+            className="flex items-center gap-1 rounded-lg bg-[#481D3E] px-2.5 py-1 text-[11px] font-bold hover:bg-[#3D1834] transition cursor-pointer"
+            title="بدء فاتورة جديدة (F2)"
           >
-            <span>F2</span> فاتورة جديدة
+            <span className="text-teal-300 font-mono">F2</span>
+            <span>جديدة</span>
           </button>
+
+          {/* قائمة منسدلة مدمجة للأدوات الإضافية لمنع ازدحام الشريط العلوي */}
+          <details className="relative group">
+            <summary className="list-none flex items-center gap-1 rounded-lg bg-white/10 hover:bg-white/20 px-2.5 py-1 text-[11px] font-bold cursor-pointer select-none transition">
+              <span>⚙️</span>
+              <span>أدوات واختصارات</span>
+              <span className="text-[9px] opacity-80">▾</span>
+            </summary>
+            <div className="absolute right-0 mt-1.5 w-48 rounded-xl bg-white text-slate-800 shadow-xl border border-slate-200 py-1.5 z-50 text-xs font-bold">
+              {getUserRole() !== 'CASHIER' && (
+                <button
+                  type="button"
+                  onClick={() => (window.location.href = '/dashboard')}
+                  className="w-full flex items-center gap-2 px-3.5 py-2 hover:bg-slate-100 text-right transition cursor-pointer"
+                >
+                  <span>📊</span>
+                  <span>لوحة التحكم</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => (window.location.href = '/statement')}
+                className="w-full flex items-center gap-2 px-3.5 py-2 hover:bg-slate-100 text-right transition cursor-pointer"
+              >
+                <span>📑</span>
+                <span>كشف حساب عميل</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => window.open('/customer-screen', '_blank', 'width=1024,height=768')}
+                className="w-full flex items-center gap-2 px-3.5 py-2 hover:bg-slate-100 text-right transition cursor-pointer"
+              >
+                <span>🖥️</span>
+                <span>شاشة عرض العميل</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => !isConsoleLocked && items.length > 0 && setIsPaymentOpen(true)}
+                className="w-full flex items-center gap-2 px-3.5 py-2 hover:bg-teal-50 text-teal-700 text-right border-t border-slate-100 transition cursor-pointer"
+              >
+                <span className="font-mono text-[10px] bg-teal-100 px-1.5 py-0.5 rounded">F4</span>
+                <span>نافذة الدفع السريع</span>
+              </button>
+            </div>
+          </details>
         </div>
 
-        {/* الشعار واسم النظام وسلة التسوق وبيانات المستخدم الحالي */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-          <span className="rounded-lg border border-teal-400/40 px-3 py-1 text-xs text-teal-100" title="مخزن الخصم محدد بفرع المستخدم والوردية؛ تغييره من إدارة المستخدمين بعد إغلاق الوردية وتفريغ السلة">
-            مخزن الخصم: {activeShiftData?.branch?.name || getCurrentUser()?.branchName || (getCurrentUser()?.branchId ? 'فرع المستخدم المحدد' : 'غير محدد — راجع إدارة المستخدمين')}
-          </span>
-          {/* حالة الوردية النشطة للكاشير */}
+        {/* القسم الأيسر: حالة الوردية والمخزن + المستخدم (مدمج في سطر واحد) */}
+        <div className="flex flex-wrap items-center gap-2">
           {activeShiftData ? (
-            <span className="flex items-center gap-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 text-xs font-bold shadow-2xs">
+            <span
+              className="flex items-center gap-1.5 rounded-lg bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 px-2.5 py-1 text-[11px] font-bold"
+              title={`مخزن الخصم: ${activeShiftData?.branch?.name || getCurrentUser()?.branchName || 'فرع المستخدم'}`}
+            >
               <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
-              وردية #{activeShiftData.shiftNumber} ({activeShiftData.branch?.name || 'الفرع'})
+              <span>
+                وردية #{activeShiftData.shiftNumber} •{' '}
+                {activeShiftData.branch?.name || getCurrentUser()?.branchName || 'الفرع'}
+              </span>
             </span>
           ) : (
             <button
               type="button"
               onClick={() => setIsQuickOpenShiftModal(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 text-amber-200 border border-amber-500/30 px-3 py-1 text-xs font-bold hover:bg-amber-500/30 transition shadow-2xs cursor-pointer animate-pulse"
+              className="flex items-center gap-1 rounded-lg bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2.5 py-1 text-[11px] font-bold hover:bg-amber-500/30 transition cursor-pointer animate-pulse"
               title="اضغط هنا لفتح وردية جديدة مباشرة دون مغادرة البيع"
             >
-              <span>⚠️</span> لم تفتح وردية (اضغط للفتح الفوري)
+              <span>⚠️</span>
+              <span>فتح وردية</span>
             </button>
           )}
 
-          <div className="flex items-center gap-2.5 border-l border-pink-900/50 pl-4">
-            <div className="text-right">
-              <div className="text-xs font-bold text-white leading-tight">
-                {getCurrentUser()?.name || getCurrentUser()?.username || 'مستخدم'}
-              </div>
-              <div className="text-[10px] text-teal-300 font-semibold">
-                {ROLE_LABELS[getUserRole() || ''] || 'كاشير'}
-              </div>
-            </div>
+          <div className="flex items-center gap-2 border-r border-white/15 pr-2.5">
+            <span className="text-[11px] font-bold text-white hidden sm:inline">
+              {getCurrentUser()?.name || getCurrentUser()?.username || 'مستخدم'}
+            </span>
             <button
               onClick={logoutUser}
-              className="flex items-center gap-1 rounded-lg bg-rose-500/80 hover:bg-rose-600 px-2.5 py-1.5 text-xs font-bold text-white transition shadow-sm cursor-pointer"
-              title="تسجيل الخروج والتبديل لحساب آخر"
+              className="flex items-center gap-1 rounded-lg bg-rose-500/80 hover:bg-rose-600 px-2 py-1 text-[11px] font-bold text-white transition cursor-pointer"
+              title="تسجيل الخروج"
             >
               <span>🚪</span>
-              <span>خروج</span>
+              <span className="hidden sm:inline">خروج</span>
             </button>
-          </div>
-
-          <div className="text-left">
-            <h1 className="text-lg font-black tracking-wide leading-tight">DawaCore POS</h1>
-            <p className="text-[10px] text-pink-200">نقطة بيع سريعة (مصر والسودان)</p>
-          </div>
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#481D3E] text-white">
-            🛒
           </div>
         </div>
       </header>
