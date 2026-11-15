@@ -193,13 +193,13 @@ export const DashboardPage: React.FC = () => {
                       الكاشير: {secAlert.cashierName}
                     </span>
                     <span className="text-[11px] font-mono text-slate-500">
-                      {new Date(secAlert.createdAt).toLocaleString('ar-EG')}
+                      {new Date(secAlert.createdAt).toLocaleString('en-GB')}
                     </span>
                   </div>
                   <p className="text-xs font-bold text-slate-800">{secAlert.reason}</p>
                   <p className="text-[11px] text-slate-500">
                     السلة وقت الحدث: {secAlert.cartItemsCount} أصناف — الإجمالي:{' '}
-                    {Number(secAlert.cartTotal || 0).toLocaleString()} ج.س
+                    {Number(secAlert.cartTotal || 0).toLocaleString('en-US')} ج.س
                   </p>
                 </div>
                 {!secAlert.acknowledged && (
@@ -227,21 +227,21 @@ export const DashboardPage: React.FC = () => {
       {/* 🧠 مركز دعم اتخاذ القرارات الذكي (EXECUTIVE DECISION SUPPORT SYSTEM - DSS) */}
       {/* ========================================================================= */}
 
-      <div className="bg-gradient-to-br from-[#3D1834] via-[#582949] to-[#1F3A5F] rounded-3xl p-5 sm:p-6 text-white shadow-xl border border-[#00A8A8]/30 relative overflow-hidden">
-        {/* خلفية جمالية بهوية النظام */}
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-72 h-72 bg-[#00A8A8]/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-72 h-72 bg-amber-400/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 rounded-3xl p-4 sm:p-6 text-white shadow-xl border border-indigo-500/20 relative overflow-hidden">
+        {/* خلفية جمالية */}
+        <div className="absolute top-0 right-0 -mt-8 -mr-8 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 -mb-8 -ml-8 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
 
         {/* رأس قسم دعم القرار */}
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-5">
           <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-teal-400 to-indigo-500 p-0.5 shadow-lg flex items-center justify-center">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-teal-400 to-indigo-500 p-0.5 shadow-lg flex items-center justify-center shrink-0">
               <div className="w-full h-full bg-slate-900 rounded-[14px] flex items-center justify-center">
                 <BrainCircuit className="text-teal-400" size={24} />
               </div>
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-base font-black tracking-wide text-white">
                   مركز دعم اتخاذ القرار (Executive Decision Hub)
                 </h2>
@@ -257,10 +257,10 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           {/* تبويبات قرارات الـ DSS */}
-          <div className="flex items-center bg-white/5 p-1 rounded-2xl border border-white/10 backdrop-blur-sm">
+          <div className="flex flex-wrap items-center gap-1 bg-white/5 p-1 rounded-2xl border border-white/10 backdrop-blur-sm">
             <button
               onClick={() => setActiveDssTab('REORDER')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+              className={`flex items-center gap-2 px-3 sm:px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
                 activeDssTab === 'REORDER'
                   ? 'bg-teal-500 text-slate-900 shadow-md'
                   : 'text-slate-300 hover:text-white hover:bg-white/5'
@@ -270,14 +270,14 @@ export const DashboardPage: React.FC = () => {
               <span>قرارات الشراء وإعادة الطلب</span>
               {dssData?.executiveSummary?.urgentReorders ? (
                 <span className="bg-rose-500 text-white text-[10px] font-mono px-1.5 py-0.2 rounded-full">
-                  {dssData.executiveSummary.urgentReorders}
+                  {Number(dssData.executiveSummary.urgentReorders).toLocaleString('en-US')}
                 </span>
               ) : null}
             </button>
 
             <button
               onClick={() => setActiveDssTab('EXPIRY')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+              className={`flex items-center gap-2 px-3 sm:px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
                 activeDssTab === 'EXPIRY'
                   ? 'bg-amber-400 text-slate-900 shadow-md'
                   : 'text-slate-300 hover:text-white hover:bg-white/5'
@@ -287,14 +287,14 @@ export const DashboardPage: React.FC = () => {
               <span>تصفية الصلاحيات والخصومات</span>
               {dssData?.executiveSummary?.criticalExpiryBatches ? (
                 <span className="bg-rose-500 text-white text-[10px] font-mono px-1.5 py-0.2 rounded-full">
-                  {dssData.executiveSummary.criticalExpiryBatches}
+                  {Number(dssData.executiveSummary.criticalExpiryBatches).toLocaleString('en-US')}
                 </span>
               ) : null}
             </button>
 
             <button
               onClick={() => setActiveDssTab('DEAD_STOCK')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+              className={`flex items-center gap-2 px-3 sm:px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
                 activeDssTab === 'DEAD_STOCK'
                   ? 'bg-purple-400 text-slate-900 shadow-md'
                   : 'text-slate-300 hover:text-white hover:bg-white/5'
@@ -304,7 +304,7 @@ export const DashboardPage: React.FC = () => {
               <span>رأس المال المجمد (الراكد)</span>
               {dssData?.executiveSummary?.deadItemsCount ? (
                 <span className="bg-purple-600 text-white text-[10px] font-mono px-1.5 py-0.2 rounded-full">
-                  {dssData.executiveSummary.deadItemsCount}
+                  {Number(dssData.executiveSummary.deadItemsCount).toLocaleString('en-US')}
                 </span>
               ) : null}
             </button>
@@ -312,7 +312,7 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         {/* كروت المؤشرات الاستراتيجية للـ DSS */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-5 relative z-10">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 my-4 sm:my-5 relative z-10">
           {/* كارت 1: مخاطر النفاد والشراء */}
           <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4 hover:border-teal-500/40 transition">
             <div className="flex items-center justify-between text-teal-400 mb-1">
@@ -320,8 +320,8 @@ export const DashboardPage: React.FC = () => {
               <Zap size={16} />
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black font-mono text-white">
-                {dssData?.executiveSummary?.urgentReorders || 0}
+              <span className="text-2xl font-black font-mono text-white" dir="ltr">
+                {Number(dssData?.executiveSummary?.urgentReorders || 0).toLocaleString('en-US')}
               </span>
               <span className="text-xs text-slate-300">أصناف تتطلب أمر شراء استباقي</span>
             </div>
@@ -337,8 +337,8 @@ export const DashboardPage: React.FC = () => {
               <TrendingDown size={16} />
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black font-mono text-amber-300">
-                {(dssData?.executiveSummary?.totalPotentialLoss || 0).toLocaleString()}
+              <span className="text-2xl font-black font-mono text-amber-300" dir="ltr">
+                {Number(dssData?.executiveSummary?.totalPotentialLoss || 0).toLocaleString('en-US')}
               </span>
               <span className="text-xs text-slate-300">ج.م (قيمة تكلفة)</span>
             </div>
@@ -354,8 +354,8 @@ export const DashboardPage: React.FC = () => {
               <Layers size={16} />
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black font-mono text-purple-200">
-                {(dssData?.executiveSummary?.totalFrozenCapital || 0).toLocaleString()}
+              <span className="text-2xl font-black font-mono text-purple-200" dir="ltr">
+                {Number(dssData?.executiveSummary?.totalFrozenCapital || 0).toLocaleString('en-US')}
               </span>
               <span className="text-xs text-slate-300">ج.م مجمدة بالمخازن</span>
             </div>
@@ -438,7 +438,7 @@ export const DashboardPage: React.FC = () => {
                             +{rec.suggestedOrderQty} وحدة
                           </td>
                           <td className="py-3 px-3 font-mono text-slate-300">
-                            {rec.estimatedBudget.toLocaleString()} ج.م
+                            {Number(rec.estimatedBudget || 0).toLocaleString('en-US')} ج.م
                           </td>
                           <td className="py-3 px-3">
                             {rec.bestSupplier ? (
@@ -526,7 +526,7 @@ export const DashboardPage: React.FC = () => {
                             {exp.unsoldRiskQty} وحدة
                           </td>
                           <td className="py-3 px-3 font-mono font-bold text-rose-300">
-                            {exp.potentialLoss.toLocaleString()} ج.م
+                            {Number(exp.potentialLoss || 0).toLocaleString('en-US')} ج.م
                           </td>
                           <td className="py-3 px-3">
                             <div className="flex items-center gap-1.5 font-bold">
@@ -594,7 +594,7 @@ export const DashboardPage: React.FC = () => {
                             {dead.avgCost} ج.م
                           </td>
                           <td className="py-3 px-3 font-mono font-bold text-purple-300">
-                            {dead.frozenCapital.toLocaleString()} ج.م
+                            {Number(dead.frozenCapital || 0).toLocaleString('en-US')} ج.م
                           </td>
                           <td className="py-3 px-3">
                             <span className="bg-purple-900/60 border border-purple-500/30 text-purple-200 text-[10px] px-2 py-0.5 rounded-md font-mono font-bold">
@@ -654,7 +654,7 @@ export const DashboardPage: React.FC = () => {
       ) : data ? (
         <>
           {/* ===== 1. بطاقات المؤشرات القيادية السريعة المرتبطة بالتقارير (Interactive KPI Cards) ===== */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
             {/* 1. مبيعات اليوم -> تقرير المبيعات اليومية */}
             <div
               role="button"
@@ -672,12 +672,12 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 </div>
                 <p className="text-xl font-black text-slate-900 font-mono tracking-tight">
-                  {data.summary.salesToday.toLocaleString()}{' '}
+                  <span dir="ltr">{Number(data.summary.salesToday || 0).toLocaleString('en-US')}</span>{' '}
                   <span className="text-[10px] font-bold text-slate-500">ج.س</span>
                 </p>
               </div>
               <div className="mt-3 pt-2 border-t border-emerald-200/60 flex items-center justify-between text-[10px] font-bold text-emerald-700">
-                <span>{data.summary.invoicesCount} فاتورة مصدرة</span>
+                <span>{Number(data.summary.invoicesCount || 0).toLocaleString('en-US')} فاتورة مصدرة</span>
                 <span className="inline-flex items-center gap-0.5 text-[#00A8A8] group-hover:translate-x-[-2px] transition-transform">
                   <span>تقرير اليوم</span>
                   <ArrowUpRight size={12} />
@@ -702,7 +702,7 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 </div>
                 <p className="text-xl font-black text-slate-900 font-mono tracking-tight">
-                  {data.summary.salesMonth.toLocaleString()}{' '}
+                  <span dir="ltr">{Number(data.summary.salesMonth || 0).toLocaleString('en-US')}</span>{' '}
                   <span className="text-[10px] font-bold text-slate-500">ج.س</span>
                 </p>
               </div>
@@ -732,7 +732,7 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 </div>
                 <p className="text-xl font-black text-slate-900 font-mono tracking-tight">
-                  {(data.summary.expensesToday || 0).toLocaleString()}{' '}
+                  <span dir="ltr">{Number(data.summary.expensesToday || 0).toLocaleString('en-US')}</span>{' '}
                   <span className="text-[10px] font-bold text-slate-500">ج.س</span>
                 </p>
               </div>
@@ -766,7 +766,7 @@ export const DashboardPage: React.FC = () => {
                 </p>
                 <p className="text-[10px] text-indigo-700 mt-1 font-mono font-bold truncate">
                   {data.activeShift
-                    ? `وردية #${data.activeShift.shiftNumber} (${data.activeShift.expectedCash.toLocaleString()} ج.س)`
+                    ? `وردية #${data.activeShift.shiftNumber} (${Number(data.activeShift.expectedCash || 0).toLocaleString('en-US')} ج.س)`
                     : 'لا توجد وردية مفتوحة'}
                 </p>
               </div>
@@ -796,7 +796,7 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 </div>
                 <p className="text-xl font-black text-slate-900 font-mono tracking-tight">
-                  {data.summary.totalCustomerDebt.toLocaleString()}{' '}
+                  <span dir="ltr">{Number(data.summary.totalCustomerDebt || 0).toLocaleString('en-US')}</span>{' '}
                   <span className="text-[10px] font-bold text-slate-500">ج.س</span>
                 </p>
               </div>
@@ -826,7 +826,7 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 </div>
                 <p className="text-xl font-black text-slate-900 font-mono tracking-tight">
-                  {data.summary.totalSupplierDebt.toLocaleString()}{' '}
+                  <span dir="ltr">{Number(data.summary.totalSupplierDebt || 0).toLocaleString('en-US')}</span>{' '}
                   <span className="text-[10px] font-bold text-slate-500">ج.س</span>
                 </p>
               </div>
@@ -876,7 +876,7 @@ export const DashboardPage: React.FC = () => {
                     <div key={item.date} className="flex-1 flex flex-col items-center gap-2 group relative">
                       {/* Tooltip on hover */}
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-8 bg-slate-800 text-white text-[10px] font-mono py-0.5 px-2 rounded-md whitespace-nowrap shadow-lg pointer-events-none z-10">
-                        {item.sales.toLocaleString()} ج.س
+                        {Number(item.sales || 0).toLocaleString('en-US')} ج.س
                       </div>
 
                       {/* Bar */}
@@ -910,7 +910,7 @@ export const DashboardPage: React.FC = () => {
               <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400">
                 <span>* يتم تحديث المبيعات لحظة بلحظة مع كل فاتورة معتمدة</span>
                 <span className="font-mono text-slate-600 font-bold">
-                  أعلى يوم: {maxWeeklySale.toLocaleString()} ج.س
+                  أعلى يوم: {Number(maxWeeklySale || 0).toLocaleString('en-US')} ج.س
                 </span>
               </div>
             </div>
@@ -930,7 +930,7 @@ export const DashboardPage: React.FC = () => {
                         <span>نقدياً (Cash)</span>
                       </span>
                       <span className="font-mono font-bold text-emerald-700">
-                        {Number(data.payments.CASH || 0).toLocaleString()} ج.س
+                        {Number(data.payments.CASH || 0).toLocaleString('en-US')} ج.س
                       </span>
                     </div>
                     <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
@@ -955,7 +955,7 @@ export const DashboardPage: React.FC = () => {
                         <span>بنكك / شبكة (POS)</span>
                       </span>
                       <span className="font-mono font-bold text-teal-700">
-                        {Number(data.payments.BANK_TRANSFER || 0).toLocaleString()} ج.س
+                        {Number(data.payments.BANK_TRANSFER || 0).toLocaleString('en-US')} ج.س
                       </span>
                     </div>
                     <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
@@ -980,7 +980,7 @@ export const DashboardPage: React.FC = () => {
                         <span>مبيعات آجلة (Credit)</span>
                       </span>
                       <span className="font-mono font-bold text-amber-700">
-                        {Number(data.payments.CREDIT || 0).toLocaleString()} ج.س
+                        {Number(data.payments.CREDIT || 0).toLocaleString('en-US')} ج.س
                       </span>
                     </div>
                     <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
@@ -1002,7 +1002,7 @@ export const DashboardPage: React.FC = () => {
               <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-500">إجمالي متحصلات اليوم:</span>
                 <span className="text-sm font-black font-mono text-[#582949]">
-                  {totalPayments.toLocaleString()} ج.س
+                  {Number(totalPayments || 0).toLocaleString('en-US')} ج.س
                 </span>
               </div>
             </div>
@@ -1057,7 +1057,7 @@ export const DashboardPage: React.FC = () => {
 
                       <div className="text-left flex items-center gap-3">
                         <span className="text-sm font-black font-mono text-[#582949]">
-                          {Number(item.amount).toLocaleString()} ج.س
+                          {Number(item.amount || 0).toLocaleString('en-US')} ج.س
                         </span>
                         <a
                           href="/expenses?status=PENDING"
@@ -1097,7 +1097,7 @@ export const DashboardPage: React.FC = () => {
                           <div className="flex justify-between text-xs mb-1">
                             <span className="font-bold text-slate-700 truncate max-w-[140px]">{type}</span>
                             <span className="font-mono text-slate-500 font-bold">
-                              {amount.toLocaleString()} ج.س ({percent}%)
+                              {Number(amount || 0).toLocaleString('en-US')} ج.س ({percent}%)
                             </span>
                           </div>
                           <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
@@ -1116,7 +1116,7 @@ export const DashboardPage: React.FC = () => {
               <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-500">إجمالي مصروفات الشهر:</span>
                 <span className="text-sm font-black font-mono text-rose-600">
-                  {totalExpensesDistributed.toLocaleString()} ج.س
+                  {Number(totalExpensesDistributed || 0).toLocaleString('en-US')} ج.س
                 </span>
               </div>
             </div>
@@ -1189,10 +1189,10 @@ export const DashboardPage: React.FC = () => {
                               act.type === 'SALE' ? 'text-emerald-700' : 'text-rose-600'
                             }`}
                           >
-                            {act.amount.toLocaleString()} ج.س
+                            {Number(act.amount || 0).toLocaleString('en-US')} ج.س
                           </td>
                           <td className="py-2.5 px-4 font-mono text-slate-400 text-[10px]">
-                            {new Date(act.date).toLocaleTimeString('ar-EG', {
+                            {new Date(act.date).toLocaleTimeString('en-GB', {
                               hour: '2-digit',
                               minute: '2-digit',
                             })}
@@ -1242,7 +1242,7 @@ export const DashboardPage: React.FC = () => {
                             {item.quantity} وحدة
                           </span>
                           <p className="text-[9px] font-mono text-slate-400">
-                            تنتهي: {new Date(item.expiryDate).toLocaleDateString('ar-EG')}
+                            تنتهي: {new Date(item.expiryDate).toLocaleDateString('en-GB')}
                           </p>
                         </div>
                       </div>
