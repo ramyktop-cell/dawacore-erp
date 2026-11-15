@@ -48,23 +48,36 @@ if (matchUrl && matchUrl[0]) {
   process.env.DATABASE_URL = matchUrl[0];
 }
 
-// 1. Sync Prisma schema with PostgreSQL database
-console.log('⏳ [1/4] Syncing Prisma Database Schema with PostgreSQL...');
-try {
-  execSync('npx --no-install prisma db push --accept-data-loss=false --skip-generate', {
-    stdio: 'inherit',
-  });
-} catch (err) {
-  console.warn('⚠️ prisma db push warning, attempting prisma migrate deploy...');
+// 1. Sync Prisma schema with PostgreSQL database (disabled by default for preview/production safety)
+const shouldSyncSchema =
+  process.env.AUTO_SYNC_SCHEMA === 'true' &&
+  process.env.SKIP_SCHEMA_SYNC !== 'true';
+
+if (shouldSyncSchema) {
+  console.log('⏳ [1/4] Syncing Prisma Database Schema with PostgreSQL...');
   try {
-    execSync('npx --no-install prisma migrate deploy', { stdio: 'inherit' });
-  } catch (err2) {
-    console.warn('⚠️ Schema migration check completed with warning:', err2.message);
+    execSync('npx --no-install prisma db push --accept-data-loss=false --skip-generate', {
+      stdio: 'inherit',
+    });
+  } catch (err) {
+    console.warn('⚠️ prisma db push warning, attempting prisma migrate deploy...');
+    try {
+      execSync('npx --no-install prisma migrate deploy', { stdio: 'inherit' });
+    } catch (err2) {
+      console.warn('⚠️ Schema migration check completed with warning:', err2.message);
+    }
   }
+} else {
+  console.log('⏭️ [1/4] Skipping database schema sync (AUTO_SYNC_SCHEMA != true).');
 }
 
 // 2. Run idempotent production bootstrap (Company, Main Branch, COA, FiscalYear, Admin User, Initial Medicines)
-if (process.env.AUTO_BOOTSTRAP !== 'false') {
+// Disabled by default for preview to prevent automatic account or master data creation
+const shouldBootstrap =
+  process.env.AUTO_BOOTSTRAP === 'true' &&
+  process.env.SKIP_BOOTSTRAP !== 'true';
+
+if (shouldBootstrap) {
   console.log('🌱 [2/4] Verifying initial ERP master data & admin account...');
   try {
     execSync('node tools/bootstrap-admin.cjs', { stdio: 'inherit' });
@@ -72,7 +85,7 @@ if (process.env.AUTO_BOOTSTRAP !== 'false') {
     console.warn('⚠️ Bootstrap check warning (continuing startup):', err.message);
   }
 } else {
-  console.log('⏭️ [2/4] Skipping bootstrap (AUTO_BOOTSTRAP=false).');
+  console.log('⏭️ [2/4] Skipping automatic bootstrap/account creation (AUTO_BOOTSTRAP != true).');
 }
 
 // 3. Auto-activate cloud container license (Render containers have ephemeral filesystems & dynamic hostnames)
@@ -87,7 +100,9 @@ if (process.env.AUTO_ACTIVATE_CLOUD_LICENSE !== 'false') {
     const secretKey =
       process.env.VENDOR_SECRET || 'DAWACORE_MASTER_VENDOR_SECRET_KEY_PROD_2026_SECURE';
     const clientName =
-      process.env.BOOTSTRAP_COMPANY_NAME?.trim() || 'صيدلية دواء كور (Cloud)';
+      process.env.BOOTSTRAP_COMPANY_NAME?.trim() ||
+      process.env.PLATFORM_NAME?.trim() ||
+      'MadarCore (Cloud)';
 
     const payload = {
       h: hwid,
