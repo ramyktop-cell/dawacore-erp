@@ -6,6 +6,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { usersApi } from '../../api/users';
 import { companiesApi } from '../../api/companies';
 import { branchesApi } from '../../api/branches';
+import { getBusinessTerminology } from '../../utils/business-terminology';
 import { X, ShieldCheck } from 'lucide-react';
 
 // ============ مخطط التحقق من الصحة (Zod Schema) ============
@@ -73,6 +74,12 @@ export const UserFormModal: React.FC<Props> = ({
   });
 
   const selectedCompanyId = watch('companyId');
+  const selectedCompany = companiesData?.items?.find(
+    (c: any) => c.id === selectedCompanyId,
+  );
+  const selectedCompanyTerms = getBusinessTerminology(
+    selectedCompany?.businessType || 'PHARMACY',
+  );
 
   // ============ جلب الفروع بناءً على الشركة المختارة ============
   const { data: branchesData } = useQuery({
@@ -243,6 +250,22 @@ export const UserFormModal: React.FC<Props> = ({
               <p className="text-xs text-slate-400 mt-1">
                 اتركه فارغاً للمستخدم العام (مدير الشركة)
               </p>
+            </div>
+          </div>
+
+          {/* ============ نشاط الشركة (للقراءة فقط - يورث من الشركة) ============ */}
+          <div className="rounded-xl border border-teal-200 bg-teal-50/50 p-3 flex items-center justify-between gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700">
+                نشاط الشركة التابع لها المستخدم (للقراءة فقط)
+              </label>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                يتبع المستخدم نشاط الشركة المختارة تلقائياً ولا يُخزن نشاط مستقل للمستخدم
+              </p>
+            </div>
+            <div className="flex items-center gap-2 rounded-lg bg-white border border-teal-200 px-3 py-1.5 text-xs font-black text-[#582949] shrink-0">
+              <span>{selectedCompanyTerms.icon}</span>
+              <span>{selectedCompanyTerms.labelAr}</span>
             </div>
           </div>
 

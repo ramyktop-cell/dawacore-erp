@@ -1,4 +1,6 @@
-﻿declare global {
+﻿import { getActiveCompanyBrand } from '../utils/platform-brand';
+
+declare global {
   interface Window {
     qz: any;
   }
@@ -166,7 +168,7 @@ export class ThermalPrinterService {
         const escPosData = [
           '\x1B\x40', // تهيئة الطابعة (Initialize)
           '\x1B\x61\x01', // محاذاة في المنتصف (Center)
-          `${saleData.companyName || 'DawaCore Pharmacy'}\n`,
+          `${saleData.companyName || getActiveCompanyBrand().displayName || 'MadarCore'}\n`,
           `${saleData.branchName}\n`,
           `Invoice: ${saleData.invoiceNumber}\n`,
           '--------------------------------\n',
@@ -446,7 +448,7 @@ export class ThermalPrinterService {
 </head>
 <body>
   <div class="header">
-    <div class="brand-badge">${escapeHtml(saleData.companyName || saleData.branchName || 'الصيدلية')}</div>
+    <div class="brand-badge">${escapeHtml(saleData.companyName || getActiveCompanyBrand().displayNameAr || saleData.branchName || 'MadarCore')}</div>
   </div>
 
   <div class="meta-grid">
@@ -539,7 +541,7 @@ export class ThermalPrinterService {
   <div class="footer">
     <div><strong>${saleData.footerMessage || 'شكراً لزيارتكم • نتمنى لكم دوام الصحة والعافية'}</strong></div>
     <div>يرجى الاحتفاظ بالإيصال في حال الاستبدال أو الاسترجاع خلال 3 أيام</div>
-    <div style="margin-top:2px;font-size:8px;">Powered by DawaCore ERP</div>
+    <div style="margin-top:2px;font-size:8px;">Powered by MadarCore ERP</div>
   </div>
 </body>
 </html>`;
@@ -551,7 +553,7 @@ export class ThermalPrinterService {
   static buildCustomerPaymentHtml(voucher: { customerName: string; receiptNumber: string; previousDebt: string | number; amount: string | number; remainingDebt: string | number; companyName?: string; createdAt?: string; paymentMethod?: string; referenceNo?: string }): string {
     const money = (value: string | number) => value !== '' && Number.isFinite(Number(value)) ? Number(value).toFixed(2) : 'غير متاح';
     const methods: Record<string, string> = { CASH: 'نقداً', CARD: 'بطاقة بنكية', TRANSFER: 'تحويل بنكي', CHECK: 'شيك' };
-    return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><style>@page{size:80mm auto;margin:3mm}body{font-family:Tahoma,Arial;font-size:12px;width:72mm}h2{text-align:center;font-size:15px}p{overflow-wrap:anywhere}strong{display:block}</style></head><body><h2>${escapeHtml(voucher.companyName || 'DawaCore')}</h2><h2>سند قبض</h2><p>رقم السند: ${escapeHtml(voucher.receiptNumber)}</p><p>التاريخ: ${escapeHtml(voucher.createdAt ? new Date(voucher.createdAt).toLocaleString('ar-EG') : '')}</p><p>العميل: ${escapeHtml(voucher.customerName)}</p><p>الرصيد السابق: ${money(voucher.previousDebt)} ج.س</p><p>المبلغ المقبوض: ${money(voucher.amount)} ج.س</p><strong>الرصيد بعد السداد: ${money(voucher.remainingDebt)} ج.س</strong><p>طريقة الدفع: ${escapeHtml(methods[voucher.paymentMethod || ''] || voucher.paymentMethod || '')}</p><p>المرجع: ${escapeHtml(voucher.referenceNo || '—')}</p></body></html>`;
+    return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><style>@page{size:80mm auto;margin:3mm}body{font-family:Tahoma,Arial;font-size:12px;width:72mm}h2{text-align:center;font-size:15px}p{overflow-wrap:anywhere}strong{display:block}</style></head><body><h2>${escapeHtml(voucher.companyName || getActiveCompanyBrand().displayNameAr || 'MadarCore')}</h2><h2>سند قبض</h2><p>رقم السند: ${escapeHtml(voucher.receiptNumber)}</p><p>التاريخ: ${escapeHtml(voucher.createdAt ? new Date(voucher.createdAt).toLocaleString('ar-EG') : '')}</p><p>العميل: ${escapeHtml(voucher.customerName)}</p><p>الرصيد السابق: ${money(voucher.previousDebt)} ج.س</p><p>المبلغ المقبوض: ${money(voucher.amount)} ج.س</p><strong>الرصيد بعد السداد: ${money(voucher.remainingDebt)} ج.س</strong><p>طريقة الدفع: ${escapeHtml(methods[voucher.paymentMethod || ''] || voucher.paymentMethod || '')}</p><p>المرجع: ${escapeHtml(voucher.referenceNo || '—')}</p></body></html>`;
   }
 
   static printHtmlDocument(htmlContent: string) {
@@ -628,7 +630,7 @@ export class ThermalPrinterService {
       <div class="label-sheet">
         ${
           showPharmacyName
-            ? `<div class="pharmacy-header">${payload.pharmacyName || 'صيدلية DawaCore'}</div>`
+            ? `<div class="pharmacy-header">${escapeHtml(payload.pharmacyName || getActiveCompanyBrand().displayNameAr || 'MadarCore')}</div>`
             : ''
         }
         <div class="med-name">${payload.tradeName}</div>
@@ -764,7 +766,7 @@ export class ThermalPrinterService {
   }
 
   static buildShiftReportHtml(report: ShiftReportPayload): string {
-    const companyName = escapeHtml(report.companyName || 'مجموعة صيدليات وسوبر ماركت DawaCore');
+    const companyName = escapeHtml(report.companyName || getActiveCompanyBrand().displayNameAr || 'MadarCore');
     const branchName = escapeHtml(report.branchName || 'الفرع الرئيسي');
     const cashierName = escapeHtml(report.cashierName || 'الكاشير');
     const approvedBy = escapeHtml(report.approvedBy || '');
@@ -977,7 +979,7 @@ export class ThermalPrinterService {
 
   <div class="divider-dashed" style="margin-top: 15px;"></div>
   <div class="text-center" style="font-size: 10px; color: #444; margin-top: 4px;">
-    نظام DawaCore ERP • تم إصدار التقرير آلياً
+    منصة MadarCore ERP • تم إصدار التقرير آلياً
   </div>
 </body>
 </html>`;

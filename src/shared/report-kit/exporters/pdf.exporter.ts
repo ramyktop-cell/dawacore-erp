@@ -499,7 +499,7 @@ const BASE_TEMPLATE = `
 {{/each}}
 
 <div class="footer">
-  تم إنشاء هذا التقرير آلياً بواسطة DawaCore ERP — {{meta.generatedAt}}
+  تم إنشاء هذا التقرير آلياً بواسطة {{#if meta.companyName}}{{meta.companyName}} — {{/if}}MadarCore ERP — {{meta.generatedAt}}
 </div>
 
 </body>

@@ -21,6 +21,7 @@ import {
 import { customersApi, Customer } from '../api/customers';
 import { apiFetch } from '../api/http';
 import { getUserRole, getCurrentUser, ROLE_LABELS, logoutUser } from '../utils/permissions';
+import { getActiveCompanyBrand } from '../utils/platform-brand';
 import {
   UserPlus,
   Wallet,
@@ -498,6 +499,7 @@ export const PosPage: React.FC = () => {
   // مزامنة لحظية مع شاشة العميل (Customer Display BroadcastChannel & localStorage)
   useEffect(() => {
     const channel = new BroadcastChannel('dawacore_pos_channel');
+    const brand = getActiveCompanyBrand();
 
     const syncPayload = {
       invoiceNumber: `INV-${new Date().getFullYear()}-${String(items.length).padStart(4, '0')}`,
@@ -513,7 +515,7 @@ export const PosPage: React.FC = () => {
       grandTotal: getGrandTotal(),
       paidAmount: 0.0,
       changeAmount: 0.0,
-      statusText: items.length > 0 ? 'جاري تسجيل الأصناف...' : 'أهلاً بكم في صيدلية DawaCore',
+      statusText: items.length > 0 ? 'جاري تسجيل الأصناف...' : `أهلاً بكم في ${brand.displayNameAr}`,
     };
 
     // إرسال التحديث الفوري
@@ -929,7 +931,7 @@ export const PosPage: React.FC = () => {
             <div className="rounded-2xl bg-slate-800/90 border border-slate-700 p-4 text-right text-xs text-slate-300 space-y-2">
               <div className="font-bold text-amber-300">لماذا تم قفل الشاشة؟</div>
               <p>
-                يمنع نظام <strong>DawaCore</strong> استخدام شاشة الكاشير أثناء فتح وحدة التحكم البرمجية (Console / DevTools) لمنع أي محاولة لتغذية أو تزوير قيم المبيعات أو الأسعار.
+                تمنع منصة <strong>MadarCore</strong> استخدام شاشة الكاشير أثناء فتح وحدة التحكم البرمجية (Console / DevTools) لمنع أي محاولة لتغذية أو تزوير قيم المبيعات أو الأسعار.
               </p>
               <div className="mt-2 flex items-center gap-2 rounded-xl bg-rose-950/70 border border-rose-500/40 px-3 py-2 text-[11px] font-bold text-rose-300">
                 <span>🔔</span>

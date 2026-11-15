@@ -43,12 +43,14 @@ import { licensingApi, LicenseStatus } from './api/licensing';
 import { ActivationPage } from './pages/ActivationPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { getCurrentUser, getUserRole } from './utils/permissions';
+import { usePlatformBrand } from './hooks/usePlatformBrand';
 
 // مكون التغليف الرئيسي الذي يعرض السايدبار مع الصفحات الإدارية ونقاط البيع
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = React.useState(false);
+  const { companyBrand } = usePlatformBrand();
 
   // إغلاق القائمة الجانبية تلقائياً على الجوال/التابلت عند الانتقال لصفحة جديدة
   useEffect(() => {
@@ -81,8 +83,8 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           <span>القائمة</span>
         </button>
         <div className="flex items-center gap-2">
-          <span className="font-black text-sm tracking-wide">DawaCore ERP</span>
-          <img src="/logo.png" alt="Logo" className="w-7 h-7 rounded-lg object-cover border border-white/20" />
+          <span className="font-black text-sm tracking-wide">{companyBrand.displayName}</span>
+          <img src={companyBrand.logoUrl || '/logo.png'} alt="Logo" className="w-7 h-7 rounded-lg object-cover border border-white/20" />
         </div>
       </div>
 
@@ -153,7 +155,7 @@ const AppRoutes: React.FC = () => {
         setLicenseStatus({
           isActivated: false,
           hwid: 'تعذر الاتصال بالخادم',
-          error: 'يرجى التأكد من تشغيل خادم DawaCore Backend',
+          error: 'يرجى التأكد من تشغيل خادم MadarCore Backend',
         });
       })
       .finally(() => {

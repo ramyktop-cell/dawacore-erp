@@ -29,8 +29,8 @@ async function bootstrap() {
 
   // Configure OpenAPI / Swagger Documentation
   const config = new DocumentBuilder()
-    .setTitle('DawaCore API')
-    .setDescription('DawaCore - Core Pharmacy, Inventory, POS, Purchasing & Returns Engine')
+    .setTitle('MadarCore API')
+    .setDescription('MadarCore - Core ERP, Inventory, POS, Purchasing & Returns Engine')
     .setVersion('1.0.0')
     .addTag('Inventory', 'نواة المخزون وحجز الـ FEFO')
     .addTag('Purchasing', 'وحدة المشتريات وإدارة الموردين')
@@ -58,7 +58,7 @@ async function bootstrap() {
   const port = process.env.PORT || 3002;
   await app.listen(port, process.env.HOST || '127.0.0.1');
   console.log(`\n==================================================`);
-  console.log(`🚀 DawaCore Server running on: http://localhost:${port}`);
+  console.log(`🚀 MadarCore Server running on: http://localhost:${port}`);
   console.log(`📚 Swagger Interactive API Docs: http://localhost:${port}/api/docs`);
   console.log(`==================================================\n`);
 }

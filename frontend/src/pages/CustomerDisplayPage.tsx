@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { usePlatformBrand } from '../hooks/usePlatformBrand';
+import { useBusinessTerminology } from '../hooks/useBusinessTerminology';
 
 interface CartItem {
   id: string;
@@ -20,6 +22,8 @@ interface DisplayState {
 }
 
 export const CustomerDisplayPage: React.FC = () => {
+  const { companyBrand } = usePlatformBrand();
+  const terms = useBusinessTerminology();
   const [currentTime, setCurrentTime] = useState<string>('');
   const [data, setData] = useState<DisplayState>({
     invoiceNumber: 'S-2026-00000060',
@@ -138,30 +142,20 @@ export const CustomerDisplayPage: React.FC = () => {
           </div>
         </div>
 
-        {/* هوية الصيدلية والشعار على اليسار */}
+        {/* هوية الشركة والشعار على اليسار */}
         <div className="flex items-center gap-3">
           <div className="text-left">
             <h1 className="text-2xl font-black tracking-wider leading-none">
-              DawaCore Pharmacy
+              {companyBrand.displayName}
             </h1>
-            <p className="text-xs text-pink-200 text-right mt-1">نعتني بصحتكم</p>
+            <p className="text-xs text-pink-200 text-right mt-1">{terms.labelAr}</p>
           </div>
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#00A8A8] text-white shadow">
-            {/* أيقونة صيدلية / حقيبة إسعافات */}
-            <svg
-              className="h-7 w-7"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 3v2m6-2v2M4 7h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V9a2 2 0 012-2zm5 7h6m-3-3v6"
-              />
-            </svg>
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#00A8A8] text-white shadow overflow-hidden">
+            <img
+              src={companyBrand.logoUrl || '/logo.png'}
+              alt={companyBrand.displayName}
+              className="h-full w-full object-cover"
+            />
           </div>
         </div>
       </header>
@@ -224,7 +218,7 @@ export const CustomerDisplayPage: React.FC = () => {
 
           {/* عناوين الأعمدة */}
           <div className="grid grid-cols-12 bg-slate-50/70 px-6 py-3 text-sm font-bold text-slate-500 border-b border-slate-100">
-            <div className="col-span-6 text-right">الدواء</div>
+            <div className="col-span-6 text-right">{terms.itemSingular}</div>
             <div className="col-span-2 text-center">الكمية</div>
             <div className="col-span-2 text-center">السعر</div>
             <div className="col-span-2 text-left">الإجمالي</div>
@@ -235,7 +229,7 @@ export const CustomerDisplayPage: React.FC = () => {
             {data.items.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center text-slate-300">
                 <span className="text-5xl">🛍️</span>
-                <p className="text-sm font-semibold text-slate-400 mt-2">أهلاً بكم في صيدلية DawaCore</p>
+                <p className="text-sm font-semibold text-slate-400 mt-2">أهلاً بكم في {companyBrand.displayNameAr}</p>
               </div>
             ) : (
               <div className="divide-y divide-slate-100">

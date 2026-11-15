@@ -233,7 +233,7 @@ export class PdfExportService {
 
     // ── بيانات الشركة والفرع والعميل
     const company = invoice.branch?.company || invoice.company || {};
-    const companyName = company.name || invoice.companyName || 'DawaCore';
+    const companyName = company.name || invoice.companyName || 'MadarCore';
     const companyAddress = company.address || invoice.branch?.address || '';
     const companyPhone = company.phone || invoice.branch?.phone || '';
     const companyEmail = company.email || '';
@@ -825,7 +825,7 @@ export class PdfExportService {
   private buildCustomerStatementDocDefinition(report: any): any {
     const customer = report.customer || {};
     const period = report.period || {};
-    const companyName = customer.company?.name || report.meta?.companyName || 'مجموعة صيدليات داواكور العالمية';
+    const companyName = customer.company?.name || report.meta?.companyName || 'مدار كور';
     const branchName = customer.branch?.name || report.meta?.branchName;
 
     return {
@@ -982,7 +982,7 @@ export class PdfExportService {
         },
         // التذييل
         {
-          text: `تم استخراج هذا الكشف آلياً بواسطة نظام داواكور لإدارة الصيدليات — ${new Date().toLocaleString('ar-EG')}`,
+          text: `تم استخراج هذا الكشف آلياً بواسطة منصة مدار كور (MadarCore) — ${new Date().toLocaleString('ar-EG')}`,
           fontSize: 7.5,
           italics: true,
           alignment: 'center',
@@ -1012,7 +1012,7 @@ export class PdfExportService {
   // Builder: Customer Receipt Voucher (سند قبض)
   // ============================================
   private buildReceiptVoucherDocDefinition(voucher: any): any {
-    const companyName = voucher.companyName || 'مجموعة صيدليات داواكور العالمية';
+    const companyName = voucher.companyName || 'مدار كور';
     const branchName = voucher.branchName || 'الفرع الرئيسي';
     const receiptNo = voucher.receiptNumber || 'REC-00000';
     const formattedDate = new Date(voucher.createdAt || Date.now()).toLocaleDateString('ar-EG', {
@@ -1188,7 +1188,7 @@ export class PdfExportService {
   // Builder: Expense Voucher (سند صرف نقدية / بنك)
   // ============================================
   private buildExpenseVoucherDocDefinition(voucher: any): any {
-    const companyName = voucher.companyName || 'مجموعة صيدليات داواكور';
+    const companyName = voucher.companyName || 'مدار كور';
     const branchName = voucher.branchName || 'الفرع الرئيسي';
     const voucherNo = voucher.expenseNumber || 'EXP-00000';
     const currency = voucher.currency || 'ج.س';
@@ -1273,7 +1273,7 @@ export class PdfExportService {
       },
       footer: (currentPage: number, pageCount: number) => ({
         columns: [
-          { text: 'نظام DawaCore ERP & POS المحاسبي', alignment: 'right', fontSize: 8, color: '#94A3B8' },
+          { text: 'منصة MadarCore ERP & POS المحاسبية', alignment: 'right', fontSize: 8, color: '#94A3B8' },
           { text: `صفحة ${currentPage} من ${pageCount}`, alignment: 'center', fontSize: 8, color: '#94A3B8' },
           { text: `تاريخ التصدير: ${formattedDate}`, alignment: 'left', fontSize: 8, color: '#94A3B8' },
         ],

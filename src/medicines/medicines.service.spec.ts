@@ -488,4 +488,52 @@ describe('MedicinesService - Unit Labels & Weighed Items', () => {
       expect(findOneResult.units[0].minSalePrice).toBe(42);
     });
   });
+
+  describe('validateScientificName for CLOTHING activity', () => {
+    it('allows empty scientificName when company businessType is CLOTHING', async () => {
+      mockPrisma.companySetting.findMany.mockResolvedValue([
+        { key: 'businessType', value: 'CLOTHING' },
+      ]);
+      mockPrisma.medicine.findUnique.mockResolvedValue(null);
+      mockPrisma.medicine.count.mockResolvedValue(10);
+      mockPrisma.medicine.create.mockResolvedValue({
+        id: 'med-cloth-1',
+        tradeName: 'قميص رجالي قطن',
+        scientificName: '',
+        units: [],
+      });
+
+      const created = await service.create(
+        {
+          tradeName: 'قميص رجالي قطن',
+          scientificName: '',
+          barcode: '6229990001112',
+          category: 'ملابس رجالية',
+          units: [{ unitType: 'UNIT' as UnitType, multiplier: 1, price: 250, isDefault: true }],
+        } as any,
+        { companyId: 'comp-cloth' } as any,
+      );
+
+      expect(created.tradeName).toBe('قميص رجالي قطن');
+      expect(mockPrisma.medicine.create).toHaveBeenCalled();
+    });
+
+    it('rejects empty scientificName when company businessType is PHARMACY', async () => {
+      mockPrisma.companySetting.findMany.mockResolvedValue([
+        { key: 'businessType', value: 'PHARMACY' },
+      ]);
+
+      await expect(
+        service.create(
+          {
+            tradeName: 'بانادول إكسترا',
+            scientificName: '   ',
+            barcode: '6229990001113',
+            category: 'مسكنات',
+          } as any,
+          { companyId: 'comp-pharm' } as any,
+        ),
+      ).rejects.toThrow(MockBadRequestException);
+    });
+  });
 });

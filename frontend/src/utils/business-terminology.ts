@@ -1,12 +1,15 @@
 /**
- * DawaCore ERP - Dynamic Business Type & Terminology Engine
+ * MadarCore ERP - Dynamic Business Type & Terminology Engine
  * Supports:
  *   - PHARMACY:     صيدلية ومستودع أدوية
  *   - SUPERMARKET:  سوبر ماركت وهايبر ماركت وتموينات
  *   - TRADING:      شركة تجارية وتوزيع وجملة
+ *   - CLOTHING:     معرض ملابس وأزياء
  */
 
-export type BusinessType = 'PHARMACY' | 'SUPERMARKET' | 'TRADING';
+import { useAuthStore } from '../stores/auth.store';
+
+export type BusinessType = 'PHARMACY' | 'SUPERMARKET' | 'TRADING' | 'CLOTHING';
 
 export interface BusinessTerminology {
   type: BusinessType;
@@ -101,29 +104,73 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessTerminology> = {
       baseUnitPlural: 'وحدة',
     },
   },
+  CLOTHING: {
+    type: 'CLOTHING',
+    labelAr: 'معرض ملابس وأزياء',
+    icon: '👔',
+    systemSubtitle: 'نظام إدارة معارض الملابس والأزياء ونقاط البيع',
+    inventorySectionTitle: 'المخزون والأصناف',
+    catalogMenuTitle: 'دليل الأصناف والموديلات',
+    catalogPageTitle: 'دليل الأصناف والملابس (Apparel Catalog)',
+    catalogPageSubtitle:
+      'إدارة أصناف الملابس، الموديلات والمقاسات، تعدد تسعير الوحدات (كرتونة / دستة / قطعة)، وحدود الطلب',
+    addNewItemButton: 'إضافة صنف ملابس جديد',
+    itemSingular: 'صنف',
+    itemPlural: 'الأصناف',
+    scientificNameLabel: 'اسم الصنف / الموديل واللون والمقاس',
+    categoryLabel: 'قسم الملابس / الفئة',
+    batchesMenuTitle: 'الأرصدة والدفعات المخزنية',
+    units: {
+      BOX: 'كرتونة / بالة',
+      STRIP: 'دستة / طقم',
+      PIECE: 'قطعة',
+      baseUnitPlural: 'قطعة',
+    },
+  },
 };
 
-const STORAGE_KEY = 'dawacore_business_type';
 const DEFAULT_BUSINESS_TYPE: BusinessType = 'PHARMACY';
 
-export function getBusinessType(): BusinessType {
-  if (typeof window === 'undefined') return DEFAULT_BUSINESS_TYPE;
-  const saved = localStorage.getItem(STORAGE_KEY) as BusinessType | null;
-  if (saved && BUSINESS_PROFILES[saved]) {
-    return saved;
+export function normalizeFrontendBusinessType(raw?: string | null): BusinessType {
+  const clean = (raw || '').trim().toUpperCase() as BusinessType;
+  if (clean && BUSINESS_PROFILES[clean]) {
+    return clean;
   }
   return DEFAULT_BUSINESS_TYPE;
 }
 
-export function setBusinessType(type: BusinessType) {
-  if (typeof window === 'undefined') return;
-  const valid: BusinessType = BUSINESS_PROFILES[type] ? type : DEFAULT_BUSINESS_TYPE;
-  localStorage.setItem(STORAGE_KEY, valid);
-  window.dispatchEvent(new CustomEvent('dawacore-business-type-changed', { detail: valid }));
+export function getBusinessType(): BusinessType {
+  const storeUser = useAuthStore.getState().user;
+  if (storeUser?.businessType) {
+    return normalizeFrontendBusinessType(storeUser.businessType);
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const rawUser = localStorage.getItem('dawacore_user');
+      if (rawUser) {
+        const parsedUser = JSON.parse(rawUser);
+        if (parsedUser?.businessType) {
+          return normalizeFrontendBusinessType(parsedUser.businessType);
+        }
+      }
+    } catch {}
+  }
+
+  return DEFAULT_BUSINESS_TYPE;
 }
 
-export function getBusinessTerminology(type?: BusinessType): BusinessTerminology {
-  const active = type || getBusinessType();
+/**
+ * Commits a server-verified businessType into the authenticated user context.
+ * Must only be called after reading from the server or after a successful server save.
+ */
+export function setBusinessType(type: BusinessType) {
+  const valid: BusinessType = normalizeFrontendBusinessType(type);
+  useAuthStore.getState().updateUserCompanyContext({ businessType: valid });
+}
+
+export function getBusinessTerminology(type?: BusinessType | string | null): BusinessTerminology {
+  const active = type ? normalizeFrontendBusinessType(type) : getBusinessType();
   return BUSINESS_PROFILES[active] || BUSINESS_PROFILES[DEFAULT_BUSINESS_TYPE];
 }
 

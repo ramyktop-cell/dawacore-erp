@@ -33,5 +33,5 @@ export const DEFAULT_SETTINGS = [
   { key: 'language', value: 'ar', dataType: 'STRING', category: 'SYSTEM', description: 'اللغة' },
   { key: 'timezone', value: 'Africa/Cairo', dataType: 'STRING', category: 'SYSTEM', description: 'المنطقة الزمنية' },
   { key: 'currencySymbol', value: 'ج.س', dataType: 'STRING', category: 'SYSTEM', description: 'رمز العملة' },
-  { key: 'businessType', value: 'PHARMACY', dataType: 'STRING', category: 'SYSTEM', description: 'نوع النشاط التجاري (PHARMACY / SUPERMARKET / TRADING)' },
+  { key: 'businessType', value: 'PHARMACY', dataType: 'STRING', category: 'SYSTEM', description: 'نوع النشاط التجاري (PHARMACY / SUPERMARKET / TRADING / CLOTHING)' },
 ];

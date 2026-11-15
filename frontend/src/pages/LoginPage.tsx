@@ -1,11 +1,14 @@
 import { ChangePasswordModal } from '../components/auth/ChangePasswordModal';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/auth.store';
 import { VirtualKeyboard } from '../components/common/VirtualKeyboard';
+import { usePlatformBrand } from '../hooks/usePlatformBrand';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const { platform, deploymentBadgeText, brandCssVars } = usePlatformBrand();
+  const [logoError, setLogoError] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -14,6 +17,10 @@ export const LoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [activeField, setActiveField] = useState<'username' | 'password'>('username');
   const [showKeyboard, setShowKeyboard] = useState(true);
+
+  useEffect(() => {
+    setLogoError(false);
+  }, [platform.platformLogoUrl]);
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -82,19 +89,45 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen w-full justify-center overflow-x-hidden bg-[#F4F6F8] font-sans lg:justify-start" dir="rtl">
-      
+    <div
+      className="flex min-h-screen w-full justify-center overflow-x-hidden bg-[#F4F6F8] font-sans lg:justify-start"
+      dir="rtl"
+      style={brandCssVars}
+    >
       {/* القسم الجانبي الأيمن: بطاقة الدخول وشاشة اللمس */}
       <div className="z-10 flex max-h-screen w-full max-w-[680px] flex-col justify-start overflow-y-auto bg-white px-4 py-6 shadow-xl sm:px-8 lg:w-[620px] lg:max-w-none lg:justify-center lg:px-10">
         <div className="mb-4 sm:mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-2xl bg-[#582949] text-white shadow-md font-bold text-xl">
-                D
-              </div>
+              {!logoError && platform.platformLogoUrl ? (
+                <img
+                  src={platform.platformLogoUrl}
+                  alt={`${platform.platformName || 'MadarCore'} Logo`}
+                  onError={() => setLogoError(true)}
+                  className="h-11 w-11 sm:h-12 sm:w-12 rounded-2xl object-cover shadow-md border-2"
+                  style={{ borderColor: platform.primaryColor }}
+                />
+              ) : (
+                <div
+                  className="flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-2xl text-white shadow-md font-bold text-xl"
+                  style={{ backgroundColor: platform.primaryColor }}
+                >
+                  {(platform.platformName || 'MadarCore').charAt(0).toUpperCase()}
+                </div>
+              )}
               <div>
-                <h1 className="text-xl sm:text-2xl font-black text-[#582949] leading-tight">DawaCore</h1>
-                <p className="text-[11px] sm:text-xs font-bold text-[#00A8A8]">نظام إدارة الصيدليات ونقاط البيع</p>
+                <h1
+                  className="text-xl sm:text-2xl font-black leading-tight"
+                  style={{ color: platform.primaryColor }}
+                >
+                  {platform.platformName || 'MadarCore'}
+                </h1>
+                <p
+                  className="text-[11px] sm:text-xs font-bold"
+                  style={{ color: platform.secondaryColor }}
+                >
+                  منصة {platform.platformNameAr || 'مدار كور'} لإدارة الأعمال ونقاط البيع
+                </p>
               </div>
             </div>
 
@@ -104,9 +137,14 @@ export const LoginPage: React.FC = () => {
               onClick={() => setShowKeyboard(!showKeyboard)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
                 showKeyboard
-                  ? 'bg-teal-50 border-[#00A8A8] text-[#00A8A8]'
+                  ? 'bg-teal-50'
                   : 'bg-slate-50 border-slate-300 text-slate-600 hover:bg-slate-100'
               }`}
+              style={
+                showKeyboard
+                  ? { borderColor: platform.secondaryColor, color: platform.secondaryColor }
+                  : undefined
+              }
               title="إظهار أو إخفاء لوحة المفاتيح الافتراضية"
             >
               <span>⌨️</span>
@@ -114,8 +152,18 @@ export const LoginPage: React.FC = () => {
             </button>
           </div>
 
-          <h2 className="mt-4 sm:mt-5 text-lg sm:text-xl font-bold text-slate-800">تسجيل الدخول للمنظومة</h2>
-          <p className="text-xs text-slate-500">مُهيّأ للأجهزة اللوحية (Tablet) وشاشات اللمس ونقاط البيع.</p>
+          <div className="mt-4 sm:mt-5 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg sm:text-xl font-bold text-slate-800">تسجيل الدخول للمنظومة</h2>
+              <p className="text-xs text-slate-500">مُهيّأ للأجهزة اللوحية (Tablet) وشاشات اللمس ونقاط البيع.</p>
+            </div>
+            <span
+              className="rounded-full border px-2.5 py-1 text-[11px] font-bold lg:hidden"
+              style={{ borderColor: platform.secondaryColor, color: platform.primaryColor }}
+            >
+              {deploymentBadgeText}
+            </span>
+          </div>
         </div>
 
         {errorMsg && (
@@ -130,7 +178,10 @@ export const LoginPage: React.FC = () => {
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-bold text-slate-700">اسم المستخدم</label>
               {activeField === 'username' && (
-                <span className="text-[10px] font-bold text-[#582949] bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+                <span
+                  className="text-[10px] font-bold bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200"
+                  style={{ color: platform.primaryColor, borderColor: platform.primaryColor }}
+                >
                   ✏️ الحقل النشط للكتابة
                 </span>
               )}
@@ -148,9 +199,10 @@ export const LoginPage: React.FC = () => {
                 maxLength={64}
                 className={`w-full rounded-xl border px-4 py-2.5 text-sm outline-none transition font-medium ${
                   activeField === 'username'
-                    ? 'border-[#582949] ring-2 ring-purple-100 bg-purple-50/20'
+                    ? 'ring-2 ring-purple-100 bg-purple-50/20'
                     : 'border-slate-300 hover:border-slate-400 bg-white'
                 }`}
+                style={activeField === 'username' ? { borderColor: platform.primaryColor } : undefined}
               />
               {username && (
                 <button
@@ -170,7 +222,10 @@ export const LoginPage: React.FC = () => {
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-bold text-slate-700">كلمة المرور</label>
               {activeField === 'password' && (
-                <span className="text-[10px] font-bold text-[#00A8A8] bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+                <span
+                  className="text-[10px] font-bold bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200"
+                  style={{ color: platform.secondaryColor, borderColor: platform.secondaryColor }}
+                >
                   ✏️ الحقل النشط للكتابة
                 </span>
               )}
@@ -187,9 +242,10 @@ export const LoginPage: React.FC = () => {
                 maxLength={128}
                 className={`w-full rounded-xl border px-4 py-2.5 text-sm outline-none transition font-medium ${
                   activeField === 'password'
-                    ? 'border-[#00A8A8] ring-2 ring-teal-100 bg-teal-50/20'
+                    ? 'ring-2 ring-teal-100 bg-teal-50/20'
                     : 'border-slate-300 hover:border-slate-400 bg-white'
                 }`}
+                style={activeField === 'password' ? { borderColor: platform.secondaryColor } : undefined}
               />
               <button
                 type="button"
@@ -205,7 +261,8 @@ export const LoginPage: React.FC = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full rounded-xl bg-[#00A8A8] py-3 text-sm font-bold text-white shadow-lg shadow-teal-700/20 transition hover:bg-[#009292] active:scale-[0.99] disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+            className="w-full rounded-xl py-3 text-sm font-bold text-white shadow-lg transition hover:opacity-95 active:scale-[0.99] disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+            style={{ backgroundColor: platform.secondaryColor }}
           >
             {isLoading ? (
               <>
@@ -218,7 +275,12 @@ export const LoginPage: React.FC = () => {
           </button>
         </form>
 
-        <button type="button" onClick={() => setChangePasswordOpen(true)} className="mt-3 w-full rounded-xl border border-teal-200 py-2 text-sm font-bold text-teal-700 hover:bg-teal-50">
+        <button
+          type="button"
+          onClick={() => setChangePasswordOpen(true)}
+          className="mt-3 w-full rounded-xl border border-teal-200 py-2 text-sm font-bold hover:bg-teal-50"
+          style={{ borderColor: platform.secondaryColor, color: platform.secondaryColor }}
+        >
           تغيير كلمة المرور
         </button>
         {changePasswordOpen && <ChangePasswordModal initialUsername={username} onClose={() => setChangePasswordOpen(false)} />}
@@ -237,27 +299,38 @@ export const LoginPage: React.FC = () => {
         )}
 
         <div className="mt-4 text-center text-[10px] text-slate-400">
-          DawaCore ERP & POS v1.0 • صيدلية المستقبل • دعم شاشات اللمس والتابلت
+          {platform.platformName || 'MadarCore'} ERP & POS v1.0 • منصة {platform.platformNameAr || 'مدار كور'} • دعم شاشات اللمس والتابلت
         </div>
       </div>
 
       {/* القسم الأيسر: لوحة ترويجية جمالية تحمل الهوية البصرية */}
-      <div className="hidden min-w-0 flex-1 flex-col justify-between bg-gradient-to-br from-[#582949] to-[#3B1A31] p-12 text-white lg:flex">
+      <div
+        className="hidden min-w-0 flex-1 flex-col justify-between p-12 text-white lg:flex"
+        style={{
+          background: `linear-gradient(135deg, ${platform.primaryColor}, #1e1b4b)`,
+        }}
+      >
         <div className="flex justify-end">
-          <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold backdrop-blur-xs text-pink-200">
-            النظام يعمل بكفاءة عالية • أونلاين
+          <span
+            className="rounded-full bg-white/10 px-3.5 py-1 text-xs font-bold backdrop-blur-xs text-white border"
+            style={{ borderColor: platform.secondaryColor }}
+          >
+            {deploymentBadgeText}
           </span>
         </div>
 
         <div className="max-w-md space-y-4">
-          <div className="inline-block rounded-2xl bg-[#00A8A8] p-3 text-white shadow-lg text-2xl">
+          <div
+            className="inline-block rounded-2xl p-3 text-white shadow-lg text-2xl"
+            style={{ backgroundColor: platform.secondaryColor }}
+          >
             ⚡
           </div>
           <h2 className="text-3xl font-black leading-tight">
-            سرعة، دقة، ورقابة صارمة على المخزون والأدوية
+            سرعة، دقة، ورقابة صارمة على المخزون والمبيعات
           </h2>
           <p className="text-sm leading-relaxed text-pink-100/80">
-            نظام متكامل يربط المبيعات بالدفعات وفق معيار FEFO، وتدقيق مالي مزدوج يضمن حماية الأرباح وتفادي العجز المخزني والمالي.
+            منصة متكاملة تربط المبيعات بالمخزون والدفعات، وتدقيق مالي مزدوج يضمن حماية الأرباح وتفادي العجز المخزني والمالي لمختلف الأنشطة التجارية.
           </p>
         </div>
 
@@ -266,7 +339,6 @@ export const LoginPage: React.FC = () => {
           <span>آمن ومشفر بنظام JWT & RBAC</span>
         </div>
       </div>
-
     </div>
   );
 };

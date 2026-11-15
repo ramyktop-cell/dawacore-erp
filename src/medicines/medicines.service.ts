@@ -273,8 +273,9 @@ export class MedicinesService {
       where: { companyId: actor.companyId, key: { in: ['businessType', 'BUSINESS_TYPE'] } },
       select: { key: true, value: true },
     }) : [];
-    const businessType = (settings.find(s => s.key === 'businessType') || settings.find(s => s.key === 'BUSINESS_TYPE'))?.value;
-    if (!['SUPERMARKET', 'TRADING'].includes(businessType)) {
+    const rawBusinessType = (settings.find(s => s.key === 'businessType') || settings.find(s => s.key === 'BUSINESS_TYPE'))?.value;
+    const businessType = (rawBusinessType || '').trim().toUpperCase();
+    if (!['SUPERMARKET', 'TRADING', 'CLOTHING'].includes(businessType)) {
       throw new BadRequestException('الاسم العلمي مطلوب لنشاط الصيدلية؛ تأكد من حفظ نوع النشاط في إعدادات الشركة');
     }
   }
@@ -322,7 +323,7 @@ export class MedicinesService {
         scalePlu: dto.isWeighed ? dto.scalePlu : null,
         barcode: dto.barcode.trim(),
         tradeName: dto.tradeName.trim(),
-        scientificName: dto.scientificName.trim(),
+        scientificName: (dto.scientificName || '').trim(),
         category: dto.category.trim(),
         minStockLevel: dto.minStockLevel ?? 10,
         units: {

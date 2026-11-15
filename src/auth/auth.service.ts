@@ -7,6 +7,23 @@ import { Role } from '@prisma/client';
 import { credentialVersion } from './security.config';
 import { AuthenticatedUser } from './security.policy';
 
+export const ALLOWED_BUSINESS_TYPES = [
+  'PHARMACY',
+  'SUPERMARKET',
+  'TRADING',
+  'CLOTHING',
+] as const;
+
+export type SupportedBusinessType = (typeof ALLOWED_BUSINESS_TYPES)[number];
+
+export function normalizeBusinessType(raw?: string | null): SupportedBusinessType {
+  const normalized = (raw || '').trim().toUpperCase();
+  if ((ALLOWED_BUSINESS_TYPES as readonly string[]).includes(normalized)) {
+    return normalized as SupportedBusinessType;
+  }
+  return 'PHARMACY';
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -53,6 +70,24 @@ export class AuthService {
       throw new UnauthorizedException('بيانات الدخول غير صحيحة');
     }
 
+    let rawBusinessType: string | null = null;
+    if (user.companyId && this.prisma.companySetting) {
+      const settings = await this.prisma.companySetting.findMany({
+        where: {
+          companyId: user.companyId,
+          key: { in: ['businessType', 'BUSINESS_TYPE'] },
+        },
+        select: { key: true, value: true },
+      });
+      const exactMatch = settings.find((s) => s.key === 'businessType');
+      const fallbackMatch = settings.find((s) => s.key === 'BUSINESS_TYPE');
+      rawBusinessType = exactMatch?.value ?? fallbackMatch?.value ?? null;
+    }
+
+    const businessType = normalizeBusinessType(rawBusinessType);
+    const companyName = user.company?.name || null;
+    const companyLogoUrl = user.company?.logoUrl || null;
+
     const payload = {
       sub: user.id,
       cv: credentialVersion(user.passwordHash),
@@ -60,7 +95,9 @@ export class AuthService {
       name: user.name,
       fullName: user.name,
       companyId: user.companyId,
-      companyName: user.company?.name,
+      companyName,
+      companyLogoUrl,
+      businessType,
       branchId: user.branchId,
       branchName: user.branch?.name || null,
       role: user.role,
@@ -77,7 +114,9 @@ export class AuthService {
         email: user.email,
         phone: user.phone,
         companyId: user.companyId,
-        companyName: user.company?.name,
+        companyName,
+        companyLogoUrl,
+        businessType,
         branchId: user.branchId,
         branchName: user.branch?.name || null,
         role: user.role,

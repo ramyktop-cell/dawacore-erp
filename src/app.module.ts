@@ -25,12 +25,14 @@ import { LicensingModule } from './licensing/licensing.module';
 import { StockCountModule } from './modules/stock-count/stock-count.module';
 import { OpeningBalanceModule } from './modules/opening-balance/opening-balance.module';
 import { AccountingReportsModule } from './modules/accounting/reports/accounting-reports.module';
+import { BrandingModule } from './branding/branding.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     EventEmitterModule.forRoot(),
     ...(process.env.DISABLE_BACKGROUND_JOBS === 'true' ? [] : [ScheduleModule.forRoot()]),
+    BrandingModule,
     StockCountModule,
     OpeningBalanceModule,
     AccountingReportsModule,
