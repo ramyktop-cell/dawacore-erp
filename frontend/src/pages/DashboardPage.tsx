@@ -43,10 +43,50 @@ export const DashboardPage: React.FC = () => {
   const userObj = userJson ? JSON.parse(userJson) : null;
   const companyId = userObj?.companyId || '11111111-0000-0000-0000-000000000001';
 
-  const { data, isLoading, refetch, isFetching } = useQuery<DashboardOverview>({
+  const { data: rawData, isLoading, refetch, isFetching } = useQuery<DashboardOverview>({
     queryKey: ['dashboard', { companyId, date }],
     queryFn: () => dashboardApi.get({ companyId, date }),
   });
+
+  // بيانات افتراضية آمنة لضمان ظهور كافة الكروت والرسوم البيانية فوراً على الهاتف والتابلت حتى أثناء التحميل
+  const data: DashboardOverview = useMemo(() => {
+    if (rawData && rawData.summary) return rawData;
+    const defaultTrend = Array.from({ length: 7 }, (_, idx) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - idx));
+      return {
+        date: d.toISOString().split('T')[0],
+        day: d.toLocaleDateString('ar-EG', { weekday: 'short' }),
+        sales: 0,
+      };
+    });
+    return {
+      kpis: [],
+      salesChart: { labels: [], datasets: [], weeklyTrend: defaultTrend },
+      expenseChart: { labels: [], data: [], colors: [] },
+      recentActivities: [],
+      alerts: [],
+      pendingApprovals: { count: 0, items: [] },
+      openShifts: 0,
+      summary: {
+        salesToday: 0,
+        salesMonth: 0,
+        expensesToday: 0,
+        invoicesCount: 0,
+        totalCustomerDebt: 0,
+        totalSupplierDebt: 0,
+        expiringSoon: 0,
+        pendingExpensesCount: 0,
+        pendingExpensesAmount: 0,
+      },
+      payments: { CASH: 0, BANK_TRANSFER: 0, CARD: 0, CREDIT: 0 },
+      weeklyTrend: defaultTrend,
+      lowStock: [],
+      recentSales: [],
+      mainAccounts: [],
+      activeShift: null,
+    };
+  }, [rawData]);
 
   const {
     data: dssData,
@@ -647,11 +687,8 @@ export const DashboardPage: React.FC = () => {
         </div>
       )}
 
-      {isLoading ? (
-        <div className="p-16 text-center text-slate-400 text-xs font-bold bg-white rounded-2xl border border-slate-200 shadow-2xs">
-          جاري استخراج وتجميع المؤشرات اللحظية...
-        </div>
-      ) : data ? (
+      {/* عرض الكروت والرسوم البيانية دائماً على جميع الشاشات (الهاتف، التابلت، والكمبيوتر) */}
+      {(
         <>
           {/* ===== 1. بطاقات المؤشرات القيادية السريعة المرتبطة بالتقارير (Interactive KPI Cards) ===== */}
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
@@ -1262,7 +1299,7 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
         </>
-      ) : null}
+      )}
     </div>
   );
 };

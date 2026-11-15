@@ -68,9 +68,9 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   }, [location.pathname, navigate]);
 
   return (
-    <div className="flex flex-col lg:flex-row h-screen w-screen overflow-hidden bg-[#F4F6F8]" dir="rtl">
+    <div className="flex flex-col lg:flex-row min-h-screen lg:h-screen w-full lg:w-screen lg:overflow-hidden bg-[#F4F6F8]" dir="rtl">
       {/* شريط علوي مدمج للهواتف والتابلت لفتح القائمة الجانبية */}
-      <div className="flex lg:hidden items-center justify-between bg-[#582949] text-white px-4 py-2.5 shadow-md shrink-0 z-30">
+      <div className="sticky top-0 flex lg:hidden items-center justify-between bg-[#582949] text-white px-4 py-2.5 shadow-md shrink-0 z-30">
         <button
           type="button"
           onClick={() => setIsMobileSidebarOpen(true)}
@@ -98,7 +98,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         mobileOpen={isMobileSidebarOpen}
         onMobileClose={() => setIsMobileSidebarOpen(false)}
       />
-      <main className="flex-1 h-full overflow-y-auto overflow-x-hidden">
+      <main className="flex-1 min-h-0 w-full lg:h-full lg:overflow-y-auto overflow-x-hidden">
         {children}
       </main>
     </div>
