@@ -90,11 +90,14 @@ New-Item -ItemType Directory -Path $runtimeDest -Force | Out-Null
 Copy-Item -Path (Join-Path $rootDir "node_modules\prisma") -Destination (Join-Path $runtimeDest "prisma") -Recurse -Force
 Copy-Item -Path (Join-Path $rootDir "node_modules\@prisma") -Destination (Join-Path $runtimeDest "@prisma") -Recurse -Force
 
-# Copy .prisma/client without temp files
+# Copy .prisma/client
 $dotPrismaDest = Join-Path $runtimeDest ".prisma\client"
 New-Item -ItemType Directory -Path $dotPrismaDest -Force | Out-Null
-Get-ChildItem -LiteralPath (Join-Path $rootDir "node_modules\.prisma\client") -Exclude "*.tmp*" | ForEach-Object {
-    Copy-Item -LiteralPath $_.FullName -Destination $dotPrismaDest -Recurse -Force
+Copy-Item -Path (Join-Path $rootDir "node_modules\.prisma\client") -Destination (Join-Path $runtimeDest ".prisma") -Recurse -Force
+
+# Purge any *.tmp* files from the entire runtime tree (RR4-07)
+Get-ChildItem -LiteralPath $runtimeDest -Recurse -File | Where-Object { $_.Name -match '\.tmp' } | ForEach-Object {
+    Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
 }
 
 # 6. Generate manifest.json with SHA-256 for all files in package
@@ -160,6 +163,25 @@ try {
 
 $zipSizeMB = [Math]::Round(((Get-Item $zipOutputPath).Length / 1MB), 2)
 Set-Content -LiteralPath "$zipOutputPath.sha256" -Value "$zipSha256  $releaseId.zip" -Encoding UTF8
+
+# 8. Post-Build ZIP Verification in Isolated Temp Extraction (RR4-07)
+Write-Host "[INFO] Verifying created ZIP archive via isolated temp extraction..." -ForegroundColor Cyan
+$testExtractDir = Join-Path $env:TEMP "MadarCore_Zip_Extract_$([Guid]::NewGuid().ToString('N'))"
+try {
+    New-Item -ItemType Directory -Path $testExtractDir -Force | Out-Null
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($zipOutputPath, $testExtractDir)
+    $extractedTarget = if (Test-Path -LiteralPath (Join-Path $testExtractDir $releaseId)) { Join-Path $testExtractDir $releaseId } else { $testExtractDir }
+    $verifierPath = Join-Path $rootDir "tools\verify-madarcore-client-upgrade.cjs"
+    & node $verifierPath --dir $extractedTarget
+    if ($LASTEXITCODE -ne 0) {
+        throw "Post-Build Verification Failed on extracted ZIP archive!"
+    }
+    Write-Host "[SUCCESS] Extracted ZIP archive verified successfully against all static rules." -ForegroundColor Green
+} finally {
+    if (Test-Path -LiteralPath $testExtractDir) {
+        Remove-Item -LiteralPath $testExtractDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
 
 Write-Host ""
 Write-Host "========================================================================" -ForegroundColor Green

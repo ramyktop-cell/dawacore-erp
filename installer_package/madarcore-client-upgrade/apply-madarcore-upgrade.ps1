@@ -67,15 +67,10 @@ $reportData = [ordered]@{
     error             = $null
 }
 
-function Save-UpgradeReport([string]$destDir) {
+function Save-Report([string]$destDir) {
     $reportData.endedAtUtc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    if (-not [string]::IsNullOrWhiteSpace($destDir) -and (Test-Path -LiteralPath $destDir)) {
-        $outPath = Join-Path $destDir "upgrade-report.json"
-        $tmpOutPath = Join-Path $destDir "upgrade-report_$runId.tmp"
-        $jsonStr = $reportData | ConvertTo-Json -Depth 6
-        [System.IO.File]::WriteAllText($tmpOutPath, $jsonStr, [System.Text.UTF8Encoding]::new($false))
-        Move-Item -LiteralPath $tmpOutPath -Destination $outPath -Force
-        Write-InfoLog "Saved atomic report to: $outPath"
+    if (-not [string]::IsNullOrWhiteSpace($destDir)) {
+        Save-UpgradeReport -DestDir $destDir -ReportData $reportData -RunId $runId | Out-Null
     }
 }
 
@@ -222,37 +217,61 @@ try {
         throw "PREFLIGHT_FAILED: Candidate Prisma runtime CLI missing: $candidatePrismaCli"
     }
 
-    # 1.9 Detect Run Mode (RR3-08)
+    # 1.9 Detect Run Mode (RR4-05)
     $runModeInfo = Detect-ApplicationRunMode -TargetDir $targetDir -Port $appPort
+    if ($runModeInfo.Mode -eq "ForeignProcess") {
+        throw "PREFLIGHT_FAILED: Port $appPort is occupied by foreign process $($runModeInfo.Name) (PID $($runModeInfo.Id))."
+    }
     $reportData.runMode = $runModeInfo.Mode
     Write-InfoLog "Detected target application run mode: $($runModeInfo.Mode)"
 
-    # 1.10 Database Connection & Migration Audit Check (RR3-05)
+    # 1.10 Database Connection & Migration Audit Check (RR4-03)
     $dbPing = Execute-SqlQuery -PsqlExe $pgTools.psql -DbConn $dbConn -Query "SELECT 1;"
     if ($dbPing.ExitCode -ne 0 -or $dbPing.StdOut -ne "1") {
         throw "Failed to connect to database $($dbConn.Host):$($dbConn.Port)/$($dbConn.Database): $($dbPing.StdErr)"
     }
 
-    # Verify existing migrations table
-    $migCheck = Execute-SqlQuery -PsqlExe $pgTools.psql -DbConn $dbConn -Query "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL;"
-    if ($migCheck.ExitCode -eq 0 -and [int]$migCheck.StdOut -gt 0) {
-        throw "PREFLIGHT_FAILED: Target database contains failed or rolled-back migrations."
+    # Audit migrations using candidate migrations directory
+    $candMigrationsDir = Join-Path $payloadDir "prisma\migrations"
+    $migAudit = Audit-TargetMigrations -PsqlExe $pgTools.psql -DbConn $dbConn -CandidateMigrationsDir $candMigrationsDir
+    $reportData.migrationAudit = [ordered]@{
+        appliedCount   = $migAudit.AppliedCount
+        candidateCount = $migAudit.CandidateCount
+        pendingCount   = $migAudit.PendingCount
     }
+    Write-InfoLog "Migration audit passed: $($migAudit.AppliedCount) applied, $($migAudit.PendingCount) pending."
 
-    # 1.11 Full Idempotency Check (RR3-06)
-    $candMain = Join-Path $payloadDir "dist\main.js"
-    $candFront = Join-Path $payloadDir "frontend\dist\index.html"
+    # 1.11 Full Idempotency Check across all payload assets, migrations, health & branding (RR4-04)
     $isAlreadyUpToDate = $false
+    if ($migAudit.PendingCount -eq 0 -and $runModeInfo.Mode -ne "None") {
+        $filesMismatch = $false
+        Get-ChildItem -LiteralPath (Join-Path $payloadDir "dist") -Recurse -File | ForEach-Object {
+            $rel = $_.FullName.Substring((Join-Path $payloadDir "dist").Length).TrimStart('\', '/')
+            $tgt = Join-Path $targetDir "dist\$rel"
+            if (-not (Test-Path -LiteralPath $tgt) -or (Calculate-FileSHA256 $_.FullName) -ne (Calculate-FileSHA256 $tgt)) {
+                $filesMismatch = $true
+            }
+        }
+        Get-ChildItem -LiteralPath (Join-Path $payloadDir "frontend\dist") -Recurse -File | ForEach-Object {
+            $rel = $_.FullName.Substring((Join-Path $payloadDir "frontend\dist").Length).TrimStart('\', '/')
+            $tgt = Join-Path $targetDir "frontend\dist\$rel"
+            if (-not (Test-Path -LiteralPath $tgt) -or (Calculate-FileSHA256 $_.FullName) -ne (Calculate-FileSHA256 $tgt)) {
+                $filesMismatch = $true
+            }
+        }
 
-    if ((Test-Path -LiteralPath $candMain) -and (Test-Path -LiteralPath $candFront)) {
-        $currMainHash = Calculate-FileSHA256 $distMain
-        $candMainHash = Calculate-FileSHA256 $candMain
-        $currFrontHash = Calculate-FileSHA256 $frontIndex
-        $candFrontHash = Calculate-FileSHA256 $candFront
-
-        if ($currMainHash -eq $candMainHash -and $currFrontHash -eq $candFrontHash) {
-            Write-SuccessLog "Target application is already running candidate build ($currMainHash)."
-            $isAlreadyUpToDate = $true
+        if (-not $filesMismatch) {
+            try {
+                $hResp = Invoke-WebRequest -Uri "http://127.0.0.1:$appPort/api/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
+                $bResp = Invoke-WebRequest -Uri "http://127.0.0.1:$appPort/api/branding" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
+                if ($hResp.StatusCode -eq 200 -and $bResp.StatusCode -eq 200) {
+                    $hObj = $hResp.Content | ConvertFrom-Json
+                    $bObj = $bResp.Content | ConvertFrom-Json
+                    if ($hObj.status -eq 'ok' -and $hObj.service -eq 'MadarCore ERP' -and $bObj.platformName -eq 'MadarCore') {
+                        $isAlreadyUpToDate = $true
+                    }
+                }
+            } catch {}
         }
     }
 
@@ -260,8 +279,8 @@ try {
         $reportData.phases.preflight = "SUCCESS"
         $reportData.stateMachine = "PREFLIGHT_PASSED"
         $reportData.result = "ALREADY_UP_TO_DATE"
-        Save-UpgradeReport (Join-Path $targetDir "backups")
-        Write-SuccessLog "System is ALREADY_UP_TO_DATE. No modifications were made."
+        Save-Report (Join-Path $targetDir "backups")
+        Write-SuccessLog "System is ALREADY_UP_TO_DATE. All files, migrations, health, and branding match candidate perfectly. No modifications made."
         exit 0
     }
 
@@ -286,7 +305,7 @@ try {
     $reportData.result = "PREFLIGHT_FAILED"
     $reportData.error = Sanitize-LogText $_.ToString()
     Write-FailureLog "Preflight check failed: $($reportData.error)"
-    Save-UpgradeReport $scriptDir
+    Save-Report $scriptDir
     exit 1
 }
 
@@ -365,7 +384,7 @@ try {
     $reportData.result = "BACKUP_FAILED"
     $reportData.error = Sanitize-LogText $_.ToString()
     Write-FailureLog "Backup failed: $($reportData.error)"
-    Save-UpgradeReport $backupDir
+    Save-Report $backupDir
     exit 1
 }
 
@@ -485,19 +504,19 @@ try {
         }
     } catch {}
 
-    Save-UpgradeReport $backupDir
+    Save-Report $backupDir
     exit 1
 }
 
 # --------------------------------------------------------------------------------
-# Phase 4 & 5: Production Deployment with Exact Directory Swap & Rollback (RR3-08, RR3-09)
+# Phase 4 & 5: Production Deployment with Exact Directory Swap & Rollback (RR4-05, RR4-06)
 # --------------------------------------------------------------------------------
 try {
     $reportData.phases.deployment = "IN_PROGRESS"
 
-    # Stop target process safely
-    Write-InfoLog "Stopping target application..."
-    Terminate-TargetProcessOnly -TargetDir $targetDir -Port $appPort | Out-Null
+    # Stop target process safely according to detected run mode
+    Write-InfoLog "Stopping target application using run mode $($runModeInfo.Mode)..."
+    Stop-ApplicationRunMode -RunModeInfo $runModeInfo -TargetDir $targetDir -Port $appPort | Out-Null
     $reportData.stateMachine = "PRODUCTION_STOPPED"
 
     # Apply Prisma Migrations to Production DB using candidate runtime strictly
@@ -510,7 +529,7 @@ try {
     }
     $reportData.stateMachine = "PRODUCTION_MIGRATED"
 
-    # Exact Atomic Directory Swap for dist, frontend/dist, and prisma (RR3-09)
+    # Exact Atomic Directory Swap for dist, frontend/dist, and prisma
     Write-InfoLog "Performing exact directory swap for candidate dist and frontend/dist..."
     Swap-DirectoryExact -SourceDir (Join-Path $payloadDir "dist") -TargetDir (Join-Path $targetDir "dist") -BackupDir (Join-Path $appBackupDir "dist_swap_backup")
     Swap-DirectoryExact -SourceDir (Join-Path $payloadDir "frontend\dist") -TargetDir (Join-Path $targetDir "frontend\dist") -BackupDir (Join-Path $appBackupDir "frontend_dist_swap_backup")
@@ -523,12 +542,12 @@ try {
     $reportData.phases.deployment = "SUCCESS"
 
     # --------------------------------------------------------------------------------
-    # Phase 6: Post-Deployment Verification (Health Check & Branding) (RR3-07)
+    # Phase 6: Post-Deployment Verification (Health Check & Branding) (RR4-05, RR4-06)
     # --------------------------------------------------------------------------------
     $reportData.phases.health = "IN_PROGRESS"
-    Write-InfoLog "Starting target application..."
+    Write-InfoLog "Restarting target application using run mode $($runModeInfo.Mode)..."
 
-    $appProc = Start-Process -FilePath $nodeExe -ArgumentList "dist/main.js" -WorkingDirectory $targetDir -PassThru -WindowStyle Hidden
+    Start-ApplicationRunMode -RunModeInfo $runModeInfo -TargetDir $targetDir -NodeExe $nodeExe | Out-Null
     Start-Sleep -Seconds 3
     $reportData.stateMachine = "APPLICATION_RESTARTED"
 
@@ -543,7 +562,7 @@ try {
             $resp = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
             if ($resp.StatusCode -eq 200) {
                 $hObj = $resp.Content | ConvertFrom-Json
-                if ($hObj.status -eq 'ok' -or $hObj.status -eq 'healthy' -or $resp.Content -match 'MadarCore') {
+                if ($hObj -and $hObj.status -eq 'ok' -and $hObj.service -eq 'MadarCore ERP') {
                     $healthOk = $true
                 }
             }
@@ -551,7 +570,7 @@ try {
             $bResp = Invoke-WebRequest -Uri $brandingUrl -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
             if ($bResp.StatusCode -eq 200) {
                 $bObj = $bResp.Content | ConvertFrom-Json
-                if ($bObj.platformName -eq 'MadarCore') {
+                if ($bObj -and $bObj.platformName -eq 'MadarCore') {
                     $brandingOk = $true
                 }
             }
@@ -570,11 +589,18 @@ try {
         throw "Branding verification failed: Service did not respond with MadarCore branding on port $appPort"
     }
 
+    # Verify Preserved Files (.env and license.key)
+    $envHashAfter = Calculate-FileSHA256 $envFile
+    $licHashAfter = Calculate-FileSHA256 $licenseFile
+    if ($envHashAfter -ne $envHashBefore -or $licHashAfter -ne $licHashBefore) {
+        throw "Preserved files check failed: .env or license.key modified during deployment."
+    }
+
     $reportData.stateMachine = "POST_DEPLOY_VERIFIED"
     $reportData.phases.health = "SUCCESS"
     $reportData.stateMachine = "SUCCESS"
     $reportData.result = "SUCCESS"
-    Save-UpgradeReport $backupDir
+    Save-Report $backupDir
     Write-SuccessLog "MadarCore Client Upgrade finished successfully!"
     exit 0
 
@@ -583,10 +609,10 @@ try {
     $reportData.stateMachine = "ROLLBACK_IN_PROGRESS"
     $reportData.result = "DEPLOYMENT_FAILED_ROLLED_BACK"
     $reportData.error = Sanitize-LogText $_.ToString()
-    Save-UpgradeReport $backupDir
+    Save-Report $backupDir
 
     # Stop failed process
-    try { Terminate-TargetProcessOnly -TargetDir $targetDir -Port $appPort | Out-Null } catch {}
+    try { Stop-ApplicationRunMode -RunModeInfo $runModeInfo -TargetDir $targetDir -Port $appPort | Out-Null } catch {}
 
     # Perform Rollback using rollback-madarcore-upgrade.ps1
     try {
@@ -602,6 +628,6 @@ try {
         Write-FailureLog "CRITICAL: Manual recovery required: $($reportData.error)"
     }
 
-    Save-UpgradeReport $backupDir
+    Save-Report $backupDir
     exit 1
 }

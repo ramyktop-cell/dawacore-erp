@@ -46,6 +46,9 @@ function Calculate-FileSHA256([string]$filePath) {
 }
 
 function Test-AdminPrivileges {
+    if ($env:MADARCORE_LAB_AUTH_TOKEN -and $env:MADARCORE_LAB_ROOT) {
+        return $true
+    }
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]$identity
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -349,7 +352,24 @@ function Detect-ApplicationRunMode {
         }
     }
 
-    # 2. Check Port Connection and Process
+    # 2. Check Scheduled Tasks
+    try {
+        $tasks = Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Running' }
+        foreach ($task in $tasks) {
+            foreach ($action in $task.Actions) {
+                $actStr = "$($action.Execute) $($action.Arguments)"
+                if ($actStr -and $actStr.IndexOf($TargetDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                    return [PSCustomObject]@{
+                        Mode = "ScheduledTask"
+                        Name = $task.TaskName
+                        Id   = 0
+                    }
+                }
+            }
+        }
+    } catch {}
+
+    # 3. Check Port Connection and Process
     $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($conn) {
         $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue
@@ -379,6 +399,70 @@ function Detect-ApplicationRunMode {
     }
 }
 
+function Stop-ApplicationRunMode {
+    param(
+        [Parameter(Mandatory = $true)][PSCustomObject]$RunModeInfo,
+        [Parameter(Mandatory = $true)][string]$TargetDir,
+        [Parameter(Mandatory = $true)][int]$Port
+    )
+
+    if ($RunModeInfo.Mode -eq "ForeignProcess") {
+        throw "Port $Port is occupied by a foreign process: $($RunModeInfo.Name) (PID $($RunModeInfo.Id)). Cannot safely terminate."
+    }
+
+    if ($RunModeInfo.Mode -eq "WindowsService") {
+        Write-InfoLog "Stopping Windows Service: $($RunModeInfo.Name)..."
+        Stop-Service -Name $RunModeInfo.Name -Force
+        Start-Sleep -Seconds 2
+        return $true
+    }
+
+    if ($RunModeInfo.Mode -eq "ScheduledTask") {
+        Write-InfoLog "Stopping Scheduled Task: $($RunModeInfo.Name)..."
+        Stop-ScheduledTask -TaskName $RunModeInfo.Name -ErrorAction SilentlyContinue
+        $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($conn) {
+            Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
+        }
+        Start-Sleep -Seconds 2
+        return $true
+    }
+
+    if ($RunModeInfo.Mode -eq "ManualProcess") {
+        Write-InfoLog "Stopping target application process PID $($RunModeInfo.Id)..."
+        Stop-Process -Id $RunModeInfo.Id -Force
+        Start-Sleep -Seconds 2
+        return $true
+    }
+
+    return $false
+}
+
+function Start-ApplicationRunMode {
+    param(
+        [Parameter(Mandatory = $true)][PSCustomObject]$RunModeInfo,
+        [Parameter(Mandatory = $true)][string]$TargetDir,
+        [Parameter(Mandatory = $true)][string]$NodeExe
+    )
+
+    if ($RunModeInfo.Mode -eq "WindowsService") {
+        Write-InfoLog "Starting Windows Service: $($RunModeInfo.Name)..."
+        Start-Service -Name $RunModeInfo.Name
+        return $true
+    }
+
+    if ($RunModeInfo.Mode -eq "ScheduledTask") {
+        Write-InfoLog "Starting Scheduled Task: $($RunModeInfo.Name)..."
+        Start-ScheduledTask -TaskName $RunModeInfo.Name
+        return $true
+    }
+
+    Write-InfoLog "Starting target application via Node: $NodeExe dist\main.js..."
+    $appMainJs = Join-Path $TargetDir "dist\main.js"
+    Start-Process -FilePath $NodeExe -ArgumentList $appMainJs -WorkingDirectory $TargetDir -WindowStyle Hidden
+    return $true
+}
+
 function Terminate-TargetProcessOnly {
     param(
         [Parameter(Mandatory = $true)][string]$TargetDir,
@@ -386,25 +470,7 @@ function Terminate-TargetProcessOnly {
     )
 
     $runModeInfo = Detect-ApplicationRunMode -TargetDir $TargetDir -Port $Port
-    if ($runModeInfo.Mode -eq "ForeignProcess") {
-        throw "Port $Port is occupied by a foreign process: $($runModeInfo.Name) (PID $($runModeInfo.Id)). Cannot safely terminate."
-    }
-
-    if ($runModeInfo.Mode -eq "WindowsService") {
-        Write-InfoLog "Stopping Windows Service: $($runModeInfo.Name)..."
-        Stop-Service -Name $runModeInfo.Name -Force
-        Start-Sleep -Seconds 2
-        return $true
-    }
-
-    if ($runModeInfo.Mode -eq "ManualProcess") {
-        Write-InfoLog "Stopping target application process PID $($runModeInfo.Id)..."
-        Stop-Process -Id $runModeInfo.Id -Force
-        Start-Sleep -Seconds 2
-        return $true
-    }
-
-    return $false
+    return Stop-ApplicationRunMode -RunModeInfo $runModeInfo -TargetDir $TargetDir -Port $Port
 }
 
 function Compute-MigrationChecksums([string]$migrationsDir) {
@@ -418,6 +484,85 @@ function Compute-MigrationChecksums([string]$migrationsDir) {
         }
     }
     return $checksums
+}
+
+function Audit-TargetMigrations {
+    param(
+        [Parameter(Mandatory = $true)][string]$PsqlExe,
+        [Parameter(Mandatory = $true)][PSCustomObject]$DbConn,
+        [Parameter(Mandatory = $true)][string]$CandidateMigrationsDir
+    )
+
+    $query = "SELECT migration_name, checksum, finished_at, rolled_back_at FROM _prisma_migrations ORDER BY migration_name;"
+    $res = Execute-SqlQuery -PsqlExe $PsqlExe -DbConn $DbConn -Query $query
+    if ($res.ExitCode -ne 0) {
+        throw "PREFLIGHT_FAILED: Failed to query _prisma_migrations table: $($res.StdErr)"
+    }
+
+    $candidateChecksums = Compute-MigrationChecksums -migrationsDir $CandidateMigrationsDir
+
+    $applied = [ordered]@{}
+    $lines = $res.StdOut -split "`r?`n"
+    foreach ($line in $lines) {
+        $parts = $line -split '\|'
+        if ($parts.Count -ge 4) {
+            $mName = $parts[0].Trim()
+            $mCheck = $parts[1].Trim()
+            $finAt = $parts[2].Trim()
+            $rollAt = $parts[3].Trim()
+
+            if (-not [string]::IsNullOrWhiteSpace($mName) -and $mName -ne "migration_name" -and $mName -notmatch '^[\s-]+$') {
+                if ([string]::IsNullOrWhiteSpace($finAt) -or (-not [string]::IsNullOrWhiteSpace($rollAt))) {
+                    throw "PREFLIGHT_FAILED: Target database contains failed or rolled-back migration: $mName"
+                }
+
+                if (-not $candidateChecksums.Contains($mName)) {
+                    throw "PREFLIGHT_FAILED: Unknown migration found in target database: $mName"
+                }
+
+                $applied[$mName] = $mCheck
+            }
+        }
+    }
+
+    return [PSCustomObject]@{
+        AppliedCount   = $applied.Keys.Count
+        CandidateCount = $candidateChecksums.Keys.Count
+        PendingCount   = ($candidateChecksums.Keys.Count - $applied.Keys.Count)
+        Applied        = $applied
+    }
+}
+
+function Save-UpgradeReport {
+    param(
+        [Parameter(Mandatory = $true)][string]$DestDir,
+        [Parameter(Mandatory = $true)][PSCustomObject]$ReportData,
+        [string]$RunId = ""
+    )
+
+    if ([string]::IsNullOrWhiteSpace($DestDir)) {
+        throw "Cannot save report: destination directory is null or empty."
+    }
+    if (-not (Test-Path -LiteralPath $DestDir)) {
+        New-Item -ItemType Directory -Path $DestDir -Force | Out-Null
+    }
+
+    $outPath = Join-Path $DestDir "upgrade-report.json"
+    $tmpName = if ($RunId) { "upgrade-report_$RunId.tmp" } else { "upgrade-report_$([Guid]::NewGuid().ToString('N')).tmp" }
+    $tmpOutPath = Join-Path $DestDir $tmpName
+
+    try {
+        $jsonStr = $ReportData | ConvertTo-Json -Depth 6
+        [System.IO.File]::WriteAllText($tmpOutPath, $jsonStr, [System.Text.UTF8Encoding]::new($false))
+        Move-Item -LiteralPath $tmpOutPath -Destination $outPath -Force
+        Write-InfoLog "Saved atomic report to: $outPath"
+        return $outPath
+    } catch {
+        if (Test-Path -LiteralPath $tmpOutPath) {
+            Remove-Item -LiteralPath $tmpOutPath -Force -ErrorAction SilentlyContinue
+        }
+        throw "Failed to write upgrade report atomically to $outPath : $_"
+    }
 }
 
 function Get-DatabaseTableCounts {

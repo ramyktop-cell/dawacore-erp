@@ -24,6 +24,7 @@ const ALLOWED_PROJECT_FILES = new Set([
   // Plan & Report docs
   'UPGRADE_REPAIR_IMPLEMENTATION_PLAN_V3.md',
   'REPAIR_REQUEST_CYCLE_3.md',
+  'REPAIR_REQUEST_CYCLE_4.md',
   'IMPLEMENTATION_PLAN.md',
   'IMPLEMENTATION_REPORT.md',
   'ANTIGRAVITY_HANDOFF.md',
@@ -71,13 +72,21 @@ try {
   fail(`Git status check failed: ${err.message}`);
 }
 
-// 2. Verify Package Structure in Staging
+// 2. Verify Package Structure in Staging or Target Directory
+const dirArgIdx = process.argv.indexOf('--dir');
 const releaseId = 'MadarCore-Client-Upgrade-20261116';
-const stagingDir = path.join(ROOT, 'installer_package', 'Output', releaseId);
+let stagingDir = dirArgIdx !== -1 && process.argv[dirArgIdx + 1]
+  ? path.resolve(process.argv[dirArgIdx + 1])
+  : path.join(ROOT, 'installer_package', 'Output', releaseId);
+
+if (fs.existsSync(path.join(stagingDir, releaseId))) {
+  stagingDir = path.join(stagingDir, releaseId);
+}
+
 if (!fs.existsSync(stagingDir)) {
-  fail(`Staging directory missing: ${stagingDir}`);
+  fail(`Target verification directory missing: ${stagingDir}`);
 } else {
-  pass(`Staging directory exists: ${stagingDir}`);
+  pass(`Target package directory exists: ${stagingDir}`);
 }
 
 const requiredRootFiles = [
@@ -133,7 +142,23 @@ for (const fb of forbiddenPaths) {
     fail(`SECURITY BREACH: Forbidden file or directory found inside package: ${fb}`);
   }
 }
-if (failures === 0) pass('Forbidden files (.env, license.key, source code, .git, uploads) are strictly absent.');
+
+// Ensure NO *.tmp* files exist in payload/prisma-runtime (RR4-07)
+function checkNoTmpFiles(dirPath) {
+  if (!fs.existsSync(dirPath)) return;
+  const items = fs.readdirSync(dirPath, { withFileTypes: true });
+  for (const item of items) {
+    const full = path.join(dirPath, item.name);
+    if (item.name.includes('.tmp')) {
+      fail(`Found residual temporary file in runtime: ${full}`);
+    }
+    if (item.isDirectory()) {
+      checkNoTmpFiles(full);
+    }
+  }
+}
+checkNoTmpFiles(path.join(payloadDir, 'prisma-runtime'));
+if (failures === 0) pass('Forbidden files (.env, license.key, source code, .git, uploads, *.tmp*) are strictly absent.');
 
 // 5. Verify NO Simulation / Mock tokens exist in package files
 const forbiddenTokens = ['SIMULATED_', 'MADARCORE_TEST_MODE', 'MADARCORE_SIMULATION_MODE', 'MOCK_BACKUP'];

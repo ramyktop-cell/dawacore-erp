@@ -150,6 +150,13 @@ if ($report.phases.deployment -eq "SUCCESS" -or $report.stateMachine -eq "PRODUC
         exit 1
     }
 
+    # Verify dump archive with pg_restore --list before restoration
+    $listRes = Execute-PostgresCommand -Executable $postgresTools.pg_restore -Arguments @("-l", $dbDumpFile) -Password $report.database.password
+    if ($listRes.ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($listRes.StdOut)) {
+        Write-FailureLog "CRITICAL: pg_restore --list failed on dump file. Archive is corrupted. State is MANUAL_RECOVERY_REQUIRED."
+        exit 1
+    }
+
     Write-InfoLog "جاري استعادة قاعدة البيانات من النسخة الاحتياطية: $dbDumpFile..."
     $dbMeta = $report.database
 
@@ -194,13 +201,71 @@ if ($report.phases.deployment -eq "SUCCESS" -or $report.stateMachine -eq "PRODUC
     if ($restoreRes.ExitCode -ne 0) {
         Write-FailureLog "فشلت استعادة قاعدة البيانات. رمز الخطأ: $($restoreRes.ExitCode)"
         Write-FailureLog $restoreRes.StdErr
+        Write-FailureLog "CRITICAL: Database restore failed. State is MANUAL_RECOVERY_REQUIRED."
         exit 1
     }
-    Write-SuccessLog "تمت استعادة قاعدة البيانات بنجاح."
+
+    # Verify table counts against baseline
+    $baselineCounts = if ($report.backupPaths.tableCountsBefore) { $report.backupPaths.tableCountsBefore } elseif ($report.restoreComparison.baseline) { $report.restoreComparison.baseline } else { $null }
+    if ($baselineCounts -and $postgresTools.psql) {
+        $dbConnObj = [PSCustomObject]@{
+            Host     = $dbMeta.host
+            Port     = $dbMeta.port
+            User     = $dbMeta.user
+            Password = $dbPass
+            Database = $dbMeta.database
+        }
+        $restoredCounts = Get-DatabaseTableCounts -PsqlExe $postgresTools.psql -DbConn $dbConnObj
+        foreach ($k in $baselineCounts.PSObject.Properties.Name) {
+            $expected = $baselineCounts.$k
+            $actual = $restoredCounts[$k]
+            if ($expected -ge 0 -and $actual -ne $expected) {
+                Write-FailureLog "CRITICAL: Table count mismatch for $k after rollback restore. Expected: $expected, Actual: $actual. State is MANUAL_RECOVERY_REQUIRED."
+                exit 1
+            }
+        }
+    }
+
+    Write-SuccessLog "تمت استعادة قاعدة البيانات ومطابقة عدد الجداول بنجاح."
+}
+
+# 8. استعادة نمط التشغيل والتحقق من صحة التطبيق السابق (RR4-05, RR4-06)
+$nodeExe = Discover-Node -targetDir $resolvedTarget
+$runModeRecorded = if ($report.runMode) { $report.runMode } else { "ManualProcess" }
+$runModeObj = [PSCustomObject]@{
+    Mode = $runModeRecorded
+    Name = ""
+    Id   = 0
+}
+
+Write-InfoLog "جاري إعادة تشغيل التطبيق بالنمط المسجل: $runModeRecorded..."
+Start-ApplicationRunMode -RunModeInfo $runModeObj -TargetDir $resolvedTarget -NodeExe $nodeExe | Out-Null
+Start-Sleep -Seconds 3
+
+# Verify previous health
+$healthVerified = $false
+$healthUrl = "http://127.0.0.1:$appPort/api/health"
+for ($i = 0; $i -lt 15; $i++) {
+    try {
+        $resp = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
+        if ($resp.StatusCode -eq 200) {
+            $hObj = $resp.Content | ConvertFrom-Json
+            if ($hObj -and ($hObj.status -eq 'ok' -or $resp.Content -match 'MadarCore')) {
+                $healthVerified = $true
+                break
+            }
+        }
+    } catch {}
+    Start-Sleep -Seconds 1
+}
+
+if (-not $healthVerified) {
+    Write-FailureLog "CRITICAL: Application failed to respond to health check after rollback. State is MANUAL_RECOVERY_REQUIRED."
+    exit 1
 }
 
 Write-Host ""
 Write-Host "========================================================================" -ForegroundColor Green
-Write-Host "  اكتملت عملية التراجع بنجاح. تم استعادة الملفات وقاعدة البيانات.  " -ForegroundColor Green
+Write-Host "  اكتملت عملية التراجع بنجاح. تم استعادة الملفات وقاعدة البيانات ونمط التشغيل السابق.  " -ForegroundColor Green
 Write-Host "========================================================================" -ForegroundColor Green
 exit 0
