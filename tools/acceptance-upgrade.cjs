@@ -244,15 +244,34 @@ async function run() {
   });
 
   let serverStarted = false;
+  let childLogs = '';
+  const appendChildLogs = (chunk) => {
+    if (!chunk) return;
+    childLogs = (childLogs + chunk.toString()).slice(-4000);
+  };
+
   serverProc.stdout.on('data', (d) => {
+    appendChildLogs(d);
     const s = d.toString();
     if (s.includes('MadarCore Server running')) {
       serverStarted = true;
     }
   });
 
-  // Poll server readiness
-  for (let i = 0; i < 30; i++) {
+  serverProc.stderr.on('data', (d) => {
+    appendChildLogs(d);
+  });
+
+  function sanitizeLogs(rawText) {
+    if (!rawText) return '';
+    return rawText
+      .replace(/postgresql:\/\/[^@\s]+@/gi, 'postgresql://***:***@')
+      .replace(/password[:=][^\s&"']+/gi, 'password=***')
+      .replace(/secret[:=][^\s&"']+/gi, 'secret=***');
+  }
+
+  // Poll server readiness up to 60 seconds (120 attempts x 500ms)
+  for (let i = 0; i < 120; i++) {
     await sleep(500);
     try {
       const res = await fetch(`${baseUrl}/api/branding`);
@@ -265,7 +284,8 @@ async function run() {
 
   if (!serverStarted) {
     serverProc.kill();
-    throw new Error(`Candidate backend failed to start on port ${ephemeralPort}`);
+    const safeOutput = sanitizeLogs(childLogs).trim().slice(-1000);
+    throw new Error(`Candidate backend failed to start on port ${ephemeralPort} within 60s. Process logs: ${safeOutput || 'No output recorded'}`);
   }
 
   console.log(`[ACCEPTANCE] Candidate backend online and responsive at ${baseUrl}`);

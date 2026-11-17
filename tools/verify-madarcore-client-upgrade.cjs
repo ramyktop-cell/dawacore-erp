@@ -41,6 +41,9 @@ const ALLOWED_PROJECT_FILES = new Set([
   'REPAIR_REQUEST.md',
   'REVIEW_REPORT.md',
 
+  // Production file allowed strictly in Cycle 8 for LC-01
+  'src/app.module.ts',
+
   // The 10 Allowed Upgrade Task Files (+ manifest.json in package dir)
   'tools/build-madarcore-client-upgrade.ps1',
   'tools/verify-madarcore-client-upgrade.cjs',

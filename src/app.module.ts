@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AppController } from './app.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { PurchasingModule } from './purchasing/purchasing.module';
@@ -57,6 +58,7 @@ import { BrandingModule } from './branding/branding.module';
     ExpensesModule,
     ReceiptsModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}
 
