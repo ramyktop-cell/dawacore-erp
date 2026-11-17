@@ -499,8 +499,25 @@ async function run() {
       'Database readback: JournalEntry for SALE with revenue and inventory/COGS lines created'
     );
 
+    // 10B. Shifts: Open dedicated manager shift for operational expenses (Scenario B)
+    const openAdminShiftRes = await fetch(`${baseUrl}/api/shifts/open`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminTokenA}`
+      },
+      body: JSON.stringify({
+        branchId: branchA1.id,
+        userId: adminUserA.id,
+        openingBalance: 100
+      })
+    });
+    const adminShiftData = await openAdminShiftRes.json();
+    assert(openAdminShiftRes.status === 201 && adminShiftData.id, 'HTTP-12E', 'Shifts: Successfully opened manager shift for expenses via POST /api/shifts/open');
+    const expenseShiftId = adminShiftData.id;
+
     // 11. Expenses (Scenario B): Create expense within cash balance, and reject when exceeding balance
-    // Shift opening cash was 250, cash sale added 50 (total expectedCash = 300)
+    // Manager shift opening cash was 100, operational expense is 30 (remaining cash = 70)
     const baseBeforeExpense = await captureBaseline();
     const expenseRes = await fetch(`${baseUrl}/api/expenses`, {
       method: 'POST',
@@ -511,7 +528,7 @@ async function run() {
       body: JSON.stringify({
         companyId: companyA.id,
         branchId: branchA1.id,
-        shiftId: shiftId,
+        shiftId: expenseShiftId,
         expenseType: 'CLEANING',
         accountId: expenseAccountA.id,
         amount: 30,
@@ -528,7 +545,7 @@ async function run() {
     assert(baseAfterExpense.accountingOutbox === baseBeforeExpense.accountingOutbox + 1, 'DB-13C', 'Database readback: AccountingOutbox count incremented by 1');
 
     const expCashMovement = await prisma.cashMovement.findFirst({
-      where: { shiftId, type: 'CASH_OUT' }
+      where: { shiftId: expenseShiftId, type: 'CASH_OUT' }
     });
     assert(expCashMovement && Number(expCashMovement.amount) === 30, 'DB-13D', 'Database readback: CashMovement CASH_OUT recorded for expense');
 
@@ -537,7 +554,7 @@ async function run() {
     });
     assert(expOutbox && expOutbox.payload && expOutbox.payload.expenseId === expenseData.id, 'DB-13E', 'Database readback: AccountingOutbox EXPENSE_CREATED event created with valid payload');
 
-    // Attempt expense greater than available cash (amount 999999 > remaining cash)
+    // Attempt expense greater than available cash (amount 999999 > remaining cash of 70)
     const baseBeforeExcessive = await captureBaseline();
     const excessiveExpenseRes = await fetch(`${baseUrl}/api/expenses`, {
       method: 'POST',
@@ -548,7 +565,7 @@ async function run() {
       body: JSON.stringify({
         companyId: companyA.id,
         branchId: branchA1.id,
-        shiftId: shiftId,
+        shiftId: expenseShiftId,
         expenseType: 'MAINTENANCE',
         accountId: expenseAccountA.id,
         amount: 999999,
