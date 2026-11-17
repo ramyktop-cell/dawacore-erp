@@ -78,6 +78,51 @@ public class Program {
                 Console.WriteLine("v20.19.0");
                 return 0;
             }
+            if (joinedArgs.Contains("main.js")) {
+                string flagMalformed = Path.Combine(baseDir, "mock_server_malformed.flag");
+                string flagBadBrand = Path.Combine(baseDir, "mock_server_bad_branding.flag");
+                string parentDir = Directory.GetParent(baseDir) != null ? Directory.GetParent(baseDir).FullName : baseDir;
+                if (!File.Exists(flagMalformed)) { flagMalformed = Path.Combine(parentDir, "mock_server_malformed.flag"); }
+                if (!File.Exists(flagBadBrand)) { flagBadBrand = Path.Combine(parentDir, "mock_server_bad_branding.flag"); }
+
+                if (File.Exists(flagMalformed) || File.Exists(flagBadBrand)) {
+                    int port = 3099;
+                    string portFile = Path.Combine(parentDir, "mock_server_port.txt");
+                    if (File.Exists(portFile)) { int.TryParse(File.ReadAllText(portFile).Trim(), out port); }
+
+                    try {
+                        System.Net.HttpListener listener = new System.Net.HttpListener();
+                        listener.Prefixes.Add("http://127.0.0.1:" + port + "/");
+                        listener.Start();
+                        DateTime start = DateTime.UtcNow;
+                        while ((DateTime.UtcNow - start).TotalSeconds < 30) {
+                            var ctxTask = listener.GetContextAsync();
+                            if (ctxTask.Wait(1000)) {
+                                var ctx = ctxTask.Result;
+                                var resp = ctx.Response;
+                                string path = ctx.Request.Url.AbsolutePath;
+                                string body = "";
+                                if (File.Exists(flagMalformed)) {
+                                    body = "{ invalid malformed json content";
+                                } else {
+                                    if (path == "/api/branding") {
+                                        body = "{\"platformName\":\"DawaCoreERP\"}";
+                                    } else {
+                                        body = "{\"status\":\"ok\",\"service\":\"MadarCore ERP\"}";
+                                    }
+                                }
+                                byte[] bytes = Encoding.UTF8.GetBytes(body);
+                                resp.ContentType = "application/json";
+                                resp.StatusCode = 200;
+                                resp.OutputStream.Write(bytes, 0, bytes.Length);
+                                resp.Close();
+                            }
+                        }
+                        listener.Stop();
+                    } catch {}
+                    return 0;
+                }
+            }
             return 0;
         }
 
@@ -316,40 +361,72 @@ public class Program {
     Record-Test "FT-11" $ft11Ok "Production migration failure in apply-madarcore-upgrade initiates automated rollback and restores original files." $true
 
     # =========================================================================
-    # FT-12: Exact directory swap and stale file cleanup (RR5-02)
+    # FT-12: Real apply -> post-swap failure -> rollback -> exact tree & runtime restored (RR6-01, RR6-03)
     # =========================================================================
-    Write-Host "`n--- Testing FT-12: Exact directory swap cleans stale files ---" -ForegroundColor Cyan
+    Write-Host "`n--- Testing FT-12: Real apply & rollback restores complete tree & runtime ---" -ForegroundColor Cyan
     $labTargetFT12 = Join-Path $testSandboxRoot "LabFT12"
     New-MockClientInstallation $labTargetFT12 "ORIGINAL_FT12" $true
-    Set-Content -LiteralPath (Join-Path $labTargetFT12 "dist\stale_legacy_code.js") -Value "// Stale legacy file"
-    $appBackupDir12 = Join-Path $labTargetFT12 "backups\mock_b12"
-    New-Item -ItemType Directory -Path $appBackupDir12 -Force | Out-Null
-    Swap-DirectoryExact -SourceDir (Join-Path $packageDir "payload\dist") -TargetDir (Join-Path $labTargetFT12 "dist") -BackupDir (Join-Path $appBackupDir12 "dist_b12")
-    $hasStaleAfterSwap = Test-Path -LiteralPath (Join-Path $labTargetFT12 "dist\stale_legacy_code.js")
-    Swap-DirectoryExact -SourceDir (Join-Path $appBackupDir12 "dist_b12") -TargetDir (Join-Path $labTargetFT12 "dist") -BackupDir (Join-Path $appBackupDir12 "rb_b12")
-    $hasStaleAfterRollback = Test-Path -LiteralPath (Join-Path $labTargetFT12 "dist\stale_legacy_code.js")
-    $ft12Ok = (-not $hasStaleAfterSwap -and $hasStaleAfterRollback)
-    Record-Test "FT-12" $ft12Ok "Exact directory swap removes stale files and rollback restores complete previous tree." $true
+    Set-Content -LiteralPath (Join-Path $labTargetFT12 "dist\stale_legacy_code.js") -Value "// Stale legacy file" -Encoding UTF8
+    New-Item -ItemType Directory -Path (Join-Path $labTargetFT12 "node_modules\prisma") -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $labTargetFT12 "node_modules\prisma\old_runtime.js") -Value "// Old Prisma Runtime" -Encoding UTF8
+
+    # When apply runs, preflight & backup & temp db & swap will succeed.
+    # Because target node.exe (LabDispatcher) does not listen on port 3099, health check fails after swap.
+    # That triggers automatic rollback via rollback-madarcore-upgrade.ps1.
+    $ft12Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $applyScript, "-TargetDirectory", $labTargetFT12, "-NonInteractive") -EnvironmentVariables @{ "MADARCORE_LAB_AUTH_TOKEN" = $env:MADARCORE_LAB_AUTH_TOKEN; "MADARCORE_LAB_ROOT" = $env:MADARCORE_LAB_ROOT }
+
+    $ft12BackupReport = Get-ChildItem -Path (Join-Path $labTargetFT12 "backups") -Recurse -Filter "upgrade-report.json" -ErrorAction SilentlyContinue | Select-Object -First 1
+    $ft12Report = if ($ft12BackupReport) { Get-Content $ft12BackupReport.FullName | ConvertFrom-Json } else { $null }
+
+    # Verify previous dist restored, stale file restored, previous runtime restored
+    $staleRestored = Test-Path -LiteralPath (Join-Path $labTargetFT12 "dist\stale_legacy_code.js")
+    $mainRestored = (Test-Path -LiteralPath (Join-Path $labTargetFT12 "dist\main.js")) -and ((Get-Content (Join-Path $labTargetFT12 "dist\main.js") -Raw) -match "ORIGINAL_FT12")
+    $runtimeRestored = Test-Path -LiteralPath (Join-Path $labTargetFT12 "node_modules\prisma\old_runtime.js")
+    $candidateOnlyPurged = -not (Test-Path -LiteralPath (Join-Path $labTargetFT12 "node_modules\@prisma"))
+
+    $ft12Ok = ($ft12Res.ExitCode -ne 0 -and $ft12Report -and $ft12Report.result -eq "ROLLBACK_SUCCESS" -and $staleRestored -and $mainRestored -and $runtimeRestored -and $candidateOnlyPurged)
+    Record-Test "FT-12" $ft12Ok "Real apply failure after swap triggers automated rollback and restores complete previous tree and runtime." $true
 
     # =========================================================================
-    # FT-13, FT-14, FT-15: Health check verification & branding (RR4-06)
+    # FT-13, FT-14, FT-15: Real entry point health and branding verification (RR6-03)
     # =========================================================================
-    Write-Host "`n--- Testing FT-13 to FT-15: Health and branding verification ---" -ForegroundColor Cyan
-    # FT-13: Unreachable application
-    $unreachablePort = 39876
-    $connUnreached = Get-NetTCPConnection -LocalPort $unreachablePort -State Listen -ErrorAction SilentlyContinue
-    Record-Test "FT-13" ($null -eq $connUnreached) "Unresponsive application startup is detected as unhealthy." $true
+    Write-Host "`n--- Testing FT-13: Unresponsive application triggers automated rollback ---" -ForegroundColor Cyan
+    $labTargetFT13 = Join-Path $testSandboxRoot "LabFT13"
+    New-MockClientInstallation $labTargetFT13 "FT13" $true
+    Set-Content -LiteralPath (Join-Path $labTargetFT13 ".env") -Value "DATABASE_URL=`"postgresql://mock_user:mock_pass@127.0.0.1:5432/mock_client_db`"`r`nPORT=39871`r`nPLATFORM_NAME=MadarCore`r`n" -Encoding UTF8
+    $ft13Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $applyScript, "-TargetDirectory", $labTargetFT13, "-NonInteractive") -EnvironmentVariables @{ "MADARCORE_LAB_AUTH_TOKEN" = $env:MADARCORE_LAB_AUTH_TOKEN; "MADARCORE_LAB_ROOT" = $env:MADARCORE_LAB_ROOT }
+    $ft13BackupReport = Get-ChildItem -Path (Join-Path $labTargetFT13 "backups") -Recurse -Filter "upgrade-report.json" -ErrorAction SilentlyContinue | Select-Object -First 1
+    $ft13Report = if ($ft13BackupReport) { Get-Content $ft13BackupReport.FullName | ConvertFrom-Json } else { $null }
+    $ft13Ok = ($ft13Res.ExitCode -ne 0 -and $ft13Report -and ($ft13Report.result -eq "ROLLBACK_SUCCESS" -or $ft13Report.result -eq "DEPLOYMENT_FAILED_ROLLED_BACK"))
+    Record-Test "FT-13" $ft13Ok "Unresponsive application startup is detected during post-deploy health check and initiates rollback." $true
 
-    # FT-14: Malformed health JSON response rejected
-    $malformedJson = "{ invalid json content not parsable"
-    $jsonParsed = $false
-    try { $null = $malformedJson | ConvertFrom-Json; $jsonParsed = $true } catch {}
-    Record-Test "FT-14" (-not $jsonParsed) "Malformed health JSON response is rejected." $true
+    # FT-14: Malformed health JSON response triggers automated rollback
+    Write-Host "`n--- Testing FT-14: Malformed health JSON response triggers automated rollback ---" -ForegroundColor Cyan
+    $labTargetFT14 = Join-Path $testSandboxRoot "LabFT14"
+    New-MockClientInstallation $labTargetFT14 "FT14" $true
+    Set-Content -LiteralPath (Join-Path $labTargetFT14 ".env") -Value "DATABASE_URL=`"postgresql://mock_user:mock_pass@127.0.0.1:5432/mock_client_db`"`r`nPORT=39872`r`nPLATFORM_NAME=MadarCore`r`n" -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $labTargetFT14 "mock_server_malformed.flag") -Value "1" -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $labTargetFT14 "mock_server_port.txt") -Value "39872" -Encoding UTF8
 
-    # FT-15: Branding identity mismatch rejected
-    $badBrandingObj = @{ platformName = "DawaCore"; deploymentMode = "OFFLINE" }
-    $isMadarBranding = ($badBrandingObj.platformName -eq "MadarCore")
-    Record-Test "FT-15" (-not $isMadarBranding) "Branding contract strictly requires platformName to be MadarCore." $true
+    $ft14Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $applyScript, "-TargetDirectory", $labTargetFT14, "-NonInteractive") -EnvironmentVariables @{ "MADARCORE_LAB_AUTH_TOKEN" = $env:MADARCORE_LAB_AUTH_TOKEN; "MADARCORE_LAB_ROOT" = $env:MADARCORE_LAB_ROOT }
+    $ft14BackupReport = Get-ChildItem -Path (Join-Path $labTargetFT14 "backups") -Recurse -Filter "upgrade-report.json" -ErrorAction SilentlyContinue | Select-Object -First 1
+    $ft14Report = if ($ft14BackupReport) { Get-Content $ft14BackupReport.FullName | ConvertFrom-Json } else { $null }
+    $ft14Ok = ($ft14Res.ExitCode -ne 0 -and $ft14Report -and ($ft14Report.result -eq "ROLLBACK_SUCCESS" -or $ft14Report.result -eq "DEPLOYMENT_FAILED_ROLLED_BACK"))
+    Record-Test "FT-14" $ft14Ok "Malformed health JSON response is rejected and initiates automated rollback." $true
+
+    # FT-15: Branding contract mismatch triggers automated rollback
+    Write-Host "`n--- Testing FT-15: Branding contract mismatch triggers automated rollback ---" -ForegroundColor Cyan
+    $labTargetFT15 = Join-Path $testSandboxRoot "LabFT15"
+    New-MockClientInstallation $labTargetFT15 "FT15" $true
+    Set-Content -LiteralPath (Join-Path $labTargetFT15 ".env") -Value "DATABASE_URL=`"postgresql://mock_user:mock_pass@127.0.0.1:5432/mock_client_db`"`r`nPORT=39873`r`nPLATFORM_NAME=MadarCore`r`n" -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $labTargetFT15 "mock_server_bad_branding.flag") -Value "1" -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $labTargetFT15 "mock_server_port.txt") -Value "39873" -Encoding UTF8
+
+    $ft15Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $applyScript, "-TargetDirectory", $labTargetFT15, "-NonInteractive") -EnvironmentVariables @{ "MADARCORE_LAB_AUTH_TOKEN" = $env:MADARCORE_LAB_AUTH_TOKEN; "MADARCORE_LAB_ROOT" = $env:MADARCORE_LAB_ROOT }
+    $ft15BackupReport = Get-ChildItem -Path (Join-Path $labTargetFT15 "backups") -Recurse -Filter "upgrade-report.json" -ErrorAction SilentlyContinue | Select-Object -First 1
+    $ft15Report = if ($ft15BackupReport) { Get-Content $ft15BackupReport.FullName | ConvertFrom-Json } else { $null }
+    $ft15Ok = ($ft15Res.ExitCode -ne 0 -and $ft15Report -and ($ft15Report.result -eq "ROLLBACK_SUCCESS" -or $ft15Report.result -eq "DEPLOYMENT_FAILED_ROLLED_BACK"))
+    Record-Test "FT-15" $ft15Ok "Branding contract mismatch on /api/branding strictly triggers automated rollback." $true
 
     # =========================================================================
     # FT-16: Preserved files preservation on upgrade
@@ -434,8 +511,7 @@ public class Program {
     Copy-DirectorySafely -SourceDir (Join-Path $packageDir "payload\frontend\dist") -DestinationDir (Join-Path $labTargetFT21 "frontend\dist")
     Copy-Item (Join-Path $packageDir "payload\prisma\schema.prisma") (Join-Path $labTargetFT21 "prisma\schema.prisma") -Force
     Copy-DirectorySafely -SourceDir (Join-Path $packageDir "payload\prisma\migrations") -DestinationDir (Join-Path $labTargetFT21 "prisma\migrations")
-    New-Item -ItemType Directory -Path (Join-Path $labTargetFT21 "node_modules\prisma\build") -Force | Out-Null
-    Copy-Item (Join-Path $packageDir "payload\prisma-runtime\node_modules\prisma\build\index.js") (Join-Path $labTargetFT21 "node_modules\prisma\build\index.js") -Force
+    Copy-DirectorySafely -SourceDir (Join-Path $packageDir "payload\prisma-runtime\node_modules") -DestinationDir (Join-Path $labTargetFT21 "node_modules")
     # Clean stale file from New-MockClientInstallation
     if (Test-Path -LiteralPath (Join-Path $labTargetFT21 "dist\stale_old_file.js")) {
         Remove-Item -LiteralPath (Join-Path $labTargetFT21 "dist\stale_old_file.js") -Force
@@ -505,6 +581,55 @@ public class Program {
         $errorCaught = $true
     }
     Record-Test "FT-24" ($atomicSuccess -and $errorCaught) "Save-UpgradeReport writes atomic report and handles invalid destination safely." $false
+
+    # =========================================================================
+    # Migration Audit Condition Standalone Tests (RR6-06)
+    # =========================================================================
+    Write-Host "`n--- Testing Migration Audit Conditions (RR6-06) ---" -ForegroundColor Cyan
+    $testMigsDir = Join-Path $testSandboxRoot "AuditMigs"
+    New-Item -ItemType Directory -Path (Join-Path $testMigsDir "20260907000000_m1") -Force | Out-Null
+    Set-Content (Join-Path $testMigsDir "20260907000000_m1\migration.sql") "CREATE TABLE t1 (id int);" -Encoding UTF8
+    $m1Hash = Calculate-FileSHA256 (Join-Path $testMigsDir "20260907000000_m1\migration.sql")
+
+    $mockPsqlAudit = Join-Path $testSandboxRoot "mock_audit_psql.exe"
+    Copy-Item $dispatcherExeFile $mockPsqlAudit -Force
+
+    $dummyDbConn = [PSCustomObject]@{ Host = "127.0.0.1"; Port = 5432; Database = "db"; User = "u"; Password = "" }
+
+    # Case A: Correct Checksum -> PASS
+    Set-Content (Join-Path $testSandboxRoot "mock_audit_psql.out") "20260907000000_m1|$m1Hash|2026-09-07 00:00:00|`n" -Encoding UTF8
+    $auditA = Audit-TargetMigrations -PsqlExe $mockPsqlAudit -DbConn $dummyDbConn -CandidateMigrationsDir $testMigsDir
+    Record-Test "MIG-01" ($auditA.AppliedCount -eq 1 -and $auditA.PendingCount -eq 0) "Migration Audit: Valid checksum succeeds." $false
+
+    # Case B: Checksum Mismatch -> PREFLIGHT_FAILED
+    Set-Content (Join-Path $testSandboxRoot "mock_audit_psql.out") "20260907000000_m1|bad_checksum_123|2026-09-07 00:00:00|`n" -Encoding UTF8
+    $auditBErr = ""
+    try { Audit-TargetMigrations -PsqlExe $mockPsqlAudit -DbConn $dummyDbConn -CandidateMigrationsDir $testMigsDir } catch { $auditBErr = $_.ToString() }
+    Record-Test "MIG-02" ($auditBErr -match "Checksum mismatch") "Migration Audit: Checksum mismatch throws PREFLIGHT_FAILED." $false
+
+    # Case C: Duplicate Migration -> PREFLIGHT_FAILED
+    Set-Content (Join-Path $testSandboxRoot "mock_audit_psql.out") "20260907000000_m1|$m1Hash|2026-09-07 00:00:00|`n20260907000000_m1|$m1Hash|2026-09-07 00:00:00|`n" -Encoding UTF8
+    $auditCErr = ""
+    try { Audit-TargetMigrations -PsqlExe $mockPsqlAudit -DbConn $dummyDbConn -CandidateMigrationsDir $testMigsDir } catch { $auditCErr = $_.ToString() }
+    Record-Test "MIG-03" ($auditCErr -match "Duplicate migration") "Migration Audit: Duplicate migration throws PREFLIGHT_FAILED." $false
+
+    # Case D: Unknown Migration -> PREFLIGHT_FAILED
+    Set-Content (Join-Path $testSandboxRoot "mock_audit_psql.out") "99999999999999_unknown_mig|$m1Hash|2026-09-07 00:00:00|`n" -Encoding UTF8
+    $auditDErr = ""
+    try { Audit-TargetMigrations -PsqlExe $mockPsqlAudit -DbConn $dummyDbConn -CandidateMigrationsDir $testMigsDir } catch { $auditDErr = $_.ToString() }
+    Record-Test "MIG-04" ($auditDErr -match "Unknown migration") "Migration Audit: Unknown migration throws PREFLIGHT_FAILED." $false
+
+    # Case E: Failed or Rolled-Back Migration -> PREFLIGHT_FAILED
+    Set-Content (Join-Path $testSandboxRoot "mock_audit_psql.out") "20260907000000_m1|$m1Hash||`n" -Encoding UTF8
+    $auditEErr = ""
+    try { Audit-TargetMigrations -PsqlExe $mockPsqlAudit -DbConn $dummyDbConn -CandidateMigrationsDir $testMigsDir } catch { $auditEErr = $_.ToString() }
+    Record-Test "MIG-05" ($auditEErr -match "failed or rolled-back") "Migration Audit: Unfinished migration throws PREFLIGHT_FAILED." $false
+
+    # Case F: Empty Checksum -> PREFLIGHT_FAILED
+    Set-Content (Join-Path $testSandboxRoot "mock_audit_psql.out") "20260907000000_m1||2026-09-07 00:00:00|`n" -Encoding UTF8
+    $auditFErr = ""
+    try { Audit-TargetMigrations -PsqlExe $mockPsqlAudit -DbConn $dummyDbConn -CandidateMigrationsDir $testMigsDir } catch { $auditFErr = $_.ToString() }
+    Record-Test "MIG-06" ($auditFErr -match "Empty checksum") "Migration Audit: Empty checksum throws PREFLIGHT_FAILED." $false
 
 } finally {
     if (Test-Path -LiteralPath $testSandboxRoot) {

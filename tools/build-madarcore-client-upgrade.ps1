@@ -3,6 +3,11 @@
 # سكريبت بناء وتجهيز حزمة الترقية المستقلة MadarCore-Client-Upgrade-20261116
 # ================================================================================
 
+param(
+    [switch]$SkipTests,
+    [switch]$PackageOnly
+)
+
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'
 
@@ -31,18 +36,22 @@ if (-not $stagingDir.StartsWith($canonicalOutput, [System.StringComparison]::Ord
     throw "SAFETY VIOLATION: Staging path $stagingDir is not contained within $canonicalOutput"
 }
 
-# 1. Build Gate: Prisma Generate, Backend Build & Frontend Build (RR5-06)
-Write-Host "[BUILD-GATE] 1/3 Running Prisma client generation..." -ForegroundColor Cyan
+# 1. Build Gate: Prisma Generate, Backend Build, Frontend Build & Unit Tests (RR6-04)
+Write-Host "[BUILD-GATE] 1/4 Running Prisma client generation..." -ForegroundColor Cyan
 & npx prisma generate
 if ($LASTEXITCODE -ne 0) { throw "Build Gate Failure: npx prisma generate failed." }
 
-Write-Host "[BUILD-GATE] 2/3 Compiling NestJS Backend..." -ForegroundColor Cyan
+Write-Host "[BUILD-GATE] 2/4 Compiling NestJS Backend..." -ForegroundColor Cyan
 & npm run build
 if ($LASTEXITCODE -ne 0) { throw "Build Gate Failure: Backend build failed." }
 
-Write-Host "[BUILD-GATE] 3/3 Compiling React SPA Frontend..." -ForegroundColor Cyan
+Write-Host "[BUILD-GATE] 3/4 Compiling React SPA Frontend..." -ForegroundColor Cyan
 & npm --prefix frontend run build
 if ($LASTEXITCODE -ne 0) { throw "Build Gate Failure: Frontend build failed." }
+
+Write-Host "[BUILD-GATE] 4/4 Running Non-interactive Backend Unit Tests..." -ForegroundColor Cyan
+& npx jest src/sales/sales.service.spec.ts
+if ($LASTEXITCODE -ne 0) { throw "Build Gate Failure: Backend unit tests failed." }
 
 # 2. Clean Staging Directory
 if (Test-Path -LiteralPath $stagingDir) {
@@ -141,6 +150,30 @@ $manifestJsonStr = $manifestObj | ConvertTo-Json -Depth 5
 [System.IO.File]::WriteAllText($manifestJsonPath, $manifestJsonStr, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "[SUCCESS] manifest.json generated with $($filesList.Count) files." -ForegroundColor Green
+
+# 6.5 Run Pre-Packaging Gates: Static Verifier & FT Matrix (RR6-04)
+if (-not $SkipTests -and -not $PackageOnly) {
+    Write-Host "[GATE] Verifying staged package with static verifier..." -ForegroundColor Cyan
+    & node (Join-Path $rootDir "tools\verify-madarcore-client-upgrade.cjs")
+    if ($LASTEXITCODE -ne 0) {
+        Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
+        throw "Build Gate Failure: Static verifier rejected staged package."
+    }
+
+    if (-not $env:MADARCORE_BUILD_RUNNING) {
+        $env:MADARCORE_BUILD_RUNNING = "1"
+        try {
+            Write-Host "[GATE] Running Comprehensive FT Matrix against staged package..." -ForegroundColor Cyan
+            & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $rootDir "tools\test-madarcore-client-upgrade.ps1")
+            if ($LASTEXITCODE -ne 0) {
+                Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
+                throw "Build Gate Failure: FT test matrix failed on staged package."
+            }
+        } finally {
+            $env:MADARCORE_BUILD_RUNNING = $null
+        }
+    }
+}
 
 # 7. Create Standalone ZIP Archive
 if (Test-Path -LiteralPath $zipOutputPath) {

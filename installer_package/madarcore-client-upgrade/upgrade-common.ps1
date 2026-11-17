@@ -343,7 +343,103 @@ function Detect-ApplicationRunMode {
     $resolvedTarget = (Resolve-Path -LiteralPath $TargetDir -ErrorAction SilentlyContinue)
     $cleanTargetDir = if ($resolvedTarget) { $resolvedTarget.Path } else { $TargetDir }
 
-    # 1. Check Windows Services (Running or starting)
+    # 1. Check Port Connection and Listener Process FIRST (RR6-05)
+    $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($conn) {
+        $listenerPid = $conn.OwningProcess
+        $proc = Get-Process -Id $listenerPid -ErrorAction SilentlyContinue
+        $cimProc = Get-CimInstance Win32_Process -Filter "ProcessId = $listenerPid" -ErrorAction SilentlyContinue
+        $cmdLine = if ($cimProc) { $cimProc.CommandLine } else { "" }
+        $procPath = if ($cimProc -and $cimProc.ExecutablePath) { $cimProc.ExecutablePath } else { if ($proc) { $proc.Path } else { "" } }
+
+        # Check if listener belongs to a Windows Service
+        $svc = Get-CimInstance Win32_Service -Filter "ProcessId = $listenerPid" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($svc) {
+            $isTarget = ($svc.PathName -and $svc.PathName.IndexOf($cleanTargetDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
+            if ($isTarget) {
+                return [PSCustomObject]@{
+                    Mode            = "WindowsService"
+                    Name            = $svc.Name
+                    Executable      = $svc.PathName
+                    Arguments       = ""
+                    TargetDirectory = $cleanTargetDir
+                    ProcessIdentity = $svc.StartName
+                    Id              = $listenerPid
+                    TaskPath        = ""
+                }
+            } else {
+                return [PSCustomObject]@{
+                    Mode            = "ForeignProcess"
+                    Name            = $svc.Name
+                    Executable      = $svc.PathName
+                    Arguments       = ""
+                    TargetDirectory = ""
+                    ProcessIdentity = $svc.StartName
+                    Id              = $listenerPid
+                    TaskPath        = ""
+                }
+            }
+        }
+
+        # Check whether process executable or commandline points to target directory
+        $isTargetProc = $false
+        if ($procPath -and $procPath.IndexOf($cleanTargetDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            $isTargetProc = $true
+        }
+        if ($cmdLine -and $cmdLine.IndexOf($cleanTargetDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            $isTargetProc = $true
+        }
+
+        if (-not $isTargetProc) {
+            return [PSCustomObject]@{
+                Mode            = "ForeignProcess"
+                Name            = if ($proc) { $proc.ProcessName } else { "Unknown" }
+                Executable      = "$procPath"
+                Arguments       = "$cmdLine"
+                TargetDirectory = ""
+                ProcessIdentity = ""
+                Id              = $listenerPid
+                TaskPath        = ""
+            }
+        }
+
+        # Process belongs to target. Check if spawned by a Scheduled Task
+        try {
+            $tasks = Get-ScheduledTask -ErrorAction SilentlyContinue
+            foreach ($task in $tasks) {
+                foreach ($action in $task.Actions) {
+                    $actStr = "$($action.Execute) $($action.Arguments)"
+                    if ($actStr -and $actStr.IndexOf($cleanTargetDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                        $taskPrincipal = if ($task.Principal) { $task.Principal.UserId } else { "" }
+                        return [PSCustomObject]@{
+                            Mode            = "ScheduledTask"
+                            Name            = $task.TaskName
+                            Executable      = "$($action.Execute)"
+                            Arguments       = "$($action.Arguments)"
+                            TargetDirectory = $cleanTargetDir
+                            ProcessIdentity = "$taskPrincipal"
+                            Id              = $listenerPid
+                            TaskPath        = "$($task.TaskPath)"
+                        }
+                    }
+                }
+            }
+        } catch {}
+
+        # Manual Process listening on port
+        return [PSCustomObject]@{
+            Mode            = "ManualProcess"
+            Name            = if ($proc) { $proc.ProcessName } else { "node" }
+            Executable      = "$procPath"
+            Arguments       = "$cmdLine"
+            TargetDirectory = $cleanTargetDir
+            ProcessIdentity = if ($proc) { "$($proc.StartInfo.UserName)" } else { "" }
+            Id              = $listenerPid
+            TaskPath        = ""
+        }
+    }
+
+    # 2. Port is not currently listening - check configured Windows Services
     $services = Get-CimInstance Win32_Service -ErrorAction SilentlyContinue
     foreach ($svc in $services) {
         if ($svc.PathName -and $svc.PathName.IndexOf($cleanTargetDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
@@ -355,11 +451,12 @@ function Detect-ApplicationRunMode {
                 TargetDirectory = $cleanTargetDir
                 ProcessIdentity = $svc.StartName
                 Id              = $svc.ProcessId
+                TaskPath        = ""
             }
         }
     }
 
-    # 2. Check Scheduled Tasks by inspecting Actions (Execute / Arguments)
+    # 3. Check configured Scheduled Tasks
     try {
         $tasks = Get-ScheduledTask -ErrorAction SilentlyContinue
         foreach ($task in $tasks) {
@@ -375,52 +472,12 @@ function Detect-ApplicationRunMode {
                         TargetDirectory = $cleanTargetDir
                         ProcessIdentity = "$taskPrincipal"
                         Id              = 0
+                        TaskPath        = "$($task.TaskPath)"
                     }
                 }
             }
         }
     } catch {}
-
-    # 3. Check Port Connection and Process
-    $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($conn) {
-        $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue
-        if ($proc) {
-            $cimProc = Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.Id)" -ErrorAction SilentlyContinue
-            $cmdLine = if ($cimProc) { $cimProc.CommandLine } else { "" }
-            $procPath = if ($cimProc -and $cimProc.ExecutablePath) { $cimProc.ExecutablePath } else { $proc.Path }
-
-            $isTarget = $false
-            if ($procPath -and $procPath.IndexOf($cleanTargetDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
-                $isTarget = $true
-            }
-            if ($cmdLine -and $cmdLine.IndexOf($cleanTargetDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
-                $isTarget = $true
-            }
-
-            if ($isTarget) {
-                return [PSCustomObject]@{
-                    Mode            = "ManualProcess"
-                    Name            = $proc.ProcessName
-                    Executable      = "$procPath"
-                    Arguments       = "$cmdLine"
-                    TargetDirectory = $cleanTargetDir
-                    ProcessIdentity = "$($proc.StartInfo.UserName)"
-                    Id              = $proc.Id
-                }
-            } else {
-                return [PSCustomObject]@{
-                    Mode            = "ForeignProcess"
-                    Name            = $proc.ProcessName
-                    Executable      = "$procPath"
-                    Arguments       = "$cmdLine"
-                    TargetDirectory = ""
-                    ProcessIdentity = ""
-                    Id              = $proc.Id
-                }
-            }
-        }
-    }
 
     return [PSCustomObject]@{
         Mode            = "None"
@@ -430,6 +487,7 @@ function Detect-ApplicationRunMode {
         TargetDirectory = $cleanTargetDir
         ProcessIdentity = ""
         Id              = 0
+        TaskPath        = ""
     }
 }
 
@@ -459,7 +517,11 @@ function Stop-ApplicationRunMode {
             throw "Cannot stop Scheduled Task: Task name is null or empty."
         }
         Write-InfoLog "Stopping Scheduled Task: $($RunModeInfo.Name)..."
-        Stop-ScheduledTask -TaskName $RunModeInfo.Name -ErrorAction SilentlyContinue
+        if (-not [string]::IsNullOrWhiteSpace($RunModeInfo.TaskPath)) {
+            Stop-ScheduledTask -TaskName $RunModeInfo.Name -TaskPath $RunModeInfo.TaskPath -ErrorAction SilentlyContinue
+        } else {
+            Stop-ScheduledTask -TaskName $RunModeInfo.Name -ErrorAction SilentlyContinue
+        }
         $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($conn) {
             Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
@@ -501,7 +563,11 @@ function Start-ApplicationRunMode {
             throw "Cannot start Scheduled Task: Task name is null or empty."
         }
         Write-InfoLog "Starting Scheduled Task: $($RunModeInfo.Name)..."
-        Start-ScheduledTask -TaskName $RunModeInfo.Name
+        if (-not [string]::IsNullOrWhiteSpace($RunModeInfo.TaskPath)) {
+            Start-ScheduledTask -TaskName $RunModeInfo.Name -TaskPath $RunModeInfo.TaskPath
+        } else {
+            Start-ScheduledTask -TaskName $RunModeInfo.Name
+        }
         return $true
     }
 
@@ -616,11 +682,20 @@ function Compare-DeployedPayloadExact {
     # 4. prisma/migrations -> prisma/migrations (Whole directory sync)
     # 5. prisma-runtime -> node_modules/.prisma & node_modules/@prisma (or payload location)
 
-    $directoryMappings = @(
-        @{ Source = (Join-Path $PayloadDir "dist"); Target = (Join-Path $TargetDir "dist"); Name = "dist" },
-        @{ Source = (Join-Path $PayloadDir "frontend\dist"); Target = (Join-Path $TargetDir "frontend\dist"); Name = "frontend/dist" },
-        @{ Source = (Join-Path $PayloadDir "prisma\migrations"); Target = (Join-Path $TargetDir "prisma\migrations"); Name = "prisma/migrations" }
-    )
+    $directoryMappings = [System.Collections.Generic.List[hashtable]]::new()
+    $directoryMappings.Add(@{ Source = (Join-Path $PayloadDir "dist"); Target = (Join-Path $TargetDir "dist"); Name = "dist" })
+    $directoryMappings.Add(@{ Source = (Join-Path $PayloadDir "frontend\dist"); Target = (Join-Path $TargetDir "frontend\dist"); Name = "frontend/dist" })
+    $directoryMappings.Add(@{ Source = (Join-Path $PayloadDir "prisma\migrations"); Target = (Join-Path $TargetDir "prisma\migrations"); Name = "prisma/migrations" })
+
+    # Managed Prisma runtime subtrees (RR6-01)
+    $managedSubtrees = @("prisma", "@prisma", ".prisma")
+    foreach ($sub in $managedSubtrees) {
+        $sSub = Join-Path $PayloadDir "prisma-runtime\node_modules\$sub"
+        $tSub = Join-Path $TargetDir "node_modules\$sub"
+        if (Test-Path -LiteralPath $sSub) {
+            $directoryMappings.Add(@{ Source = $sSub; Target = $tSub; Name = "runtime/$sub" })
+        }
+    }
 
     foreach ($map in $directoryMappings) {
         $sDir = $map.Source

@@ -132,7 +132,26 @@ if ($appBackupDir -and (Test-Path -LiteralPath $appBackupDir)) {
         Copy-DirectorySafely -SourceDir $prismaMigSrc -DestinationDir $currMig
     }
 
-    Write-SuccessLog "تمت استعادة ملفات التطبيق بنجاح."
+    # 6.5 استعادة Prisma runtime بتقنية exact swap وحذف الملفات المرشحة فقط (RR6-01)
+    $runtimeBackupDir = if ($report.backupPaths.runtimeBackup) { $report.backupPaths.runtimeBackup } else { Join-Path $appBackupDir "runtime-backup" }
+    $managedSubtrees = @("prisma", "@prisma", ".prisma")
+    foreach ($sub in $managedSubtrees) {
+        $tgtSub = Join-Path $resolvedTarget "node_modules\$sub"
+        $srcSub = Join-Path $runtimeBackupDir "node_modules\$sub"
+        if (Test-Path -LiteralPath $srcSub) {
+            Write-InfoLog "استعادة runtime subtree: $sub من النسخة الاحتياطية..."
+            if (Test-Path -LiteralPath $tgtSub) { Remove-Item -LiteralPath $tgtSub -Recurse -Force }
+            Copy-DirectorySafely -SourceDir $srcSub -DestinationDir $tgtSub
+        } else {
+            # لم تكن الشجرة موجودة قبل الترقية؛ يجب حذف الملفات المرشحة التي تم نسخها
+            if (Test-Path -LiteralPath $tgtSub) {
+                Write-InfoLog "حذف candidate-only subtree: $sub لعدم وجوده قبل الترقية..."
+                Remove-Item -LiteralPath $tgtSub -Recurse -Force
+            }
+        }
+    }
+
+    Write-SuccessLog "تمت استعادة ملفات التطبيق وشجرة runtime السابقة بنجاح."
 } else {
     Write-FailureLog "مجلد النسخ الاحتياطي لملفات التطبيق غير موجود: $appBackupDir"
     exit 1
@@ -248,7 +267,6 @@ if ($report.phases.deployment -eq "SUCCESS" -or $report.stateMachine -eq "PRODUC
 }
 
 # 8. استعادة نمط التشغيل والتحقق من صحة التطبيق السابق (RR4-05, RR4-06, RR5-05)
-$nodeExe = Discover-Node -targetDir $resolvedTarget
 $runModeRecorded = $report.runMode
 
 $runModeObj = if ($runModeRecorded -is [PSCustomObject]) {
@@ -264,8 +282,20 @@ $runModeObj = if ($runModeRecorded -is [PSCustomObject]) {
         TargetDirectory = $resolvedTarget
         ProcessIdentity = ""
         Id              = 0
+        TaskPath        = ""
     }
 }
+
+if ($runModeObj.Mode -eq "None") {
+    Write-InfoLog "التطبيق لم يكن قيد التشغيل قبل الترقية (runMode=None). تم استعادة الملفات وقاعدة البيانات السابقة بنجاح دون بدء تشغيل العملية."
+    Write-Host ""
+    Write-Host "========================================================================" -ForegroundColor Green
+    Write-Host "  اكتملت عملية التراجع بنجاح. تم استعادة الملفات وقاعدة البيانات السابقة.  " -ForegroundColor Green
+    Write-Host "========================================================================" -ForegroundColor Green
+    exit 0
+}
+
+$nodeExe = Discover-NodeExecutable -targetDir $resolvedTarget
 
 if (($runModeObj.Mode -eq "WindowsService" -or $runModeObj.Mode -eq "ScheduledTask") -and [string]::IsNullOrWhiteSpace($runModeObj.Name)) {
     Write-FailureLog "CRITICAL: Cannot restore $($runModeObj.Mode): Service/Task name is null or empty in report. State is MANUAL_RECOVERY_REQUIRED."
@@ -275,6 +305,13 @@ if (($runModeObj.Mode -eq "WindowsService" -or $runModeObj.Mode -eq "ScheduledTa
 Write-InfoLog "جاري إعادة تشغيل التطبيق بالنمط المسجل: $($runModeObj.Mode) (Name: '$($runModeObj.Name)')..."
 Start-ApplicationRunMode -RunModeInfo $runModeObj -TargetDir $resolvedTarget -NodeExe $nodeExe | Out-Null
 Start-Sleep -Seconds 3
+
+# Verify listener process identity after rollback (RR6-05)
+$postRollbackRunMode = Detect-ApplicationRunMode -TargetDir $resolvedTarget -Port $appPort
+if ($postRollbackRunMode.Mode -eq "ForeignProcess") {
+    Write-FailureLog "CRITICAL: Port $appPort is occupied by foreign process after rollback. State is MANUAL_RECOVERY_REQUIRED."
+    exit 1
+}
 
 # Verify previous health strictly via JSON contract (RR5-05)
 $healthVerified = $false

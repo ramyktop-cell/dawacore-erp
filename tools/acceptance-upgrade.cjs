@@ -126,14 +126,50 @@ async function run() {
     }
   });
 
-  // 4. Accounts for Company A (Cash and Expense)
+  // 4. Accounts for Company A (Cash, Inventory, Revenue, and Expense)
   const cashAccountA = await prisma.account.create({
     data: {
       companyId: companyA.id,
       branchId: branchA1.id,
-      code: `1010-${stamp}`,
+      code: '1101',
       name: 'الصندوق الرئيسي',
       type: AccountType.ASSET,
+      level: 1,
+      isLeaf: true
+    }
+  });
+
+  const invAccountA = await prisma.account.create({
+    data: {
+      companyId: companyA.id,
+      branchId: branchA1.id,
+      code: '1104',
+      name: 'مخزون الأدوية',
+      type: AccountType.ASSET,
+      level: 1,
+      isLeaf: true
+    }
+  });
+
+  const revAccountA = await prisma.account.create({
+    data: {
+      companyId: companyA.id,
+      branchId: branchA1.id,
+      code: '4101',
+      name: 'إيرادات مبيعات الأدوية',
+      type: AccountType.REVENUE,
+      level: 1,
+      isLeaf: true
+    }
+  });
+
+  const cogsAccountA = await prisma.account.create({
+    data: {
+      companyId: companyA.id,
+      branchId: branchA1.id,
+      code: '5101',
+      name: 'تكلفة البضاعة المباعة',
+      type: AccountType.EXPENSE,
       level: 1,
       isLeaf: true
     }
@@ -246,6 +282,19 @@ async function run() {
     }
   }
 
+  async function captureBaseline() {
+    return {
+      salesInvoices: await prisma.salesInvoice.count(),
+      invoiceItems: await prisma.saleInvoiceItem.count(),
+      inventoryTransactions: await prisma.inventoryTransaction.count(),
+      expenses: await prisma.expense.count(),
+      cashMovements: await prisma.cashMovement.count(),
+      accountingOutbox: await prisma.accountingOutbox.count(),
+      journalEntries: await prisma.journalEntry.count(),
+      journalLines: await prisma.journalLine.count(),
+    };
+  }
+
   try {
     // 1. Health Endpoint Verification
     const healthRes = await fetch(`${baseUrl}/api/health`);
@@ -343,6 +392,7 @@ async function run() {
     assert(badSaleRes.status === 400 || badSaleRes.status === 404 || !badSaleRes.ok, 'HTTP-09', 'Sales: Sale without valid active shift strictly rejected');
 
     // 8B. Sales (Scenario A): Prevent Sale using shift of another branch (branchA2 shift used in branchA1 sale)
+    const baseBeforeCrossBranch = await captureBaseline();
     const crossBranchSaleRes = await fetch(`${baseUrl}/api/sales/invoices`, {
       method: 'POST',
       headers: {
@@ -359,11 +409,14 @@ async function run() {
     });
     assert(crossBranchSaleRes.status === 400 || crossBranchSaleRes.status === 403 || crossBranchSaleRes.status === 404 || !crossBranchSaleRes.ok, 'HTTP-09B', 'Sales: Sale using shift of another branch strictly rejected');
 
-    // Verify no sales invoice or batch decrement from rejected cross-branch sale
+    // Database readback: verify baseline table counts unchanged after rejected cross-branch sale
+    const baseAfterCrossBranch = await captureBaseline();
+    assert(JSON.stringify(baseBeforeCrossBranch) === JSON.stringify(baseAfterCrossBranch), 'DB-09B-BASE', 'Database readback: Table counts unchanged after rejected cross-branch sale');
     const unmodBatchA = await prisma.batch.findUnique({ where: { id: batchA.id } });
     assert(unmodBatchA && unmodBatchA.quantityInBase === 50, 'DB-09C', 'Database readback: Batch quantity unchanged after rejected cross-branch sale');
 
     // 9. Sales: Valid Sale Invoice with Active Shift (Scenario C - Sales & COGS)
+    const baseBeforeSale = await captureBaseline();
     const validSaleRes = await fetch(`${baseUrl}/api/sales/invoices`, {
       method: 'POST',
       headers: {
@@ -383,6 +436,10 @@ async function run() {
     const saleInvoiceId = saleData.id;
 
     // 10. Database Readback: Verify Batch quantity decreased and invoice recorded
+    const baseAfterSale = await captureBaseline();
+    assert(baseAfterSale.salesInvoices === baseBeforeSale.salesInvoices + 1, 'DB-10A', 'Database readback: SalesInvoice count incremented by 1');
+    assert(baseAfterSale.inventoryTransactions === baseBeforeSale.inventoryTransactions + 1, 'DB-10B', 'Database readback: InventoryTransaction count incremented by 1');
+
     const updatedBatch = await prisma.batch.findUnique({ where: { id: batchA.id } });
     assert(updatedBatch && updatedBatch.quantityInBase === 48, 'DB-11', 'Database readback: Batch stock decremented accurately from 50 to 48');
 
@@ -393,8 +450,23 @@ async function run() {
     assert(dbInvoice && dbInvoice.shiftId === shiftId, 'DB-12', 'Database readback: Sales invoice linked to active shift in database');
     assert(dbInvoice && dbInvoice.items.length === 1 && Number(dbInvoice.items[0].costPrice) === 10, 'DB-12B', 'Database readback: Sales invoice item recorded batch costPrice (10) accurately');
 
+    // Readback InventoryTransaction SALE
+    const invTx = await prisma.inventoryTransaction.findFirst({
+      where: { referenceId: dbInvoice.invoiceNumber, type: 'SALE' }
+    });
+    assert(invTx && Number(invTx.quantity) === 2 && Number(invTx.unitCost) === 10, 'DB-12C', 'Database readback: InventoryTransaction SALE created with referenceId and accurate unitCost (10)');
+
+    // Readback accounting effect (JournalEntry for SALE)
+    await sleep(500);
+    const saleJv = await prisma.journalEntry.findFirst({
+      where: { companyId: companyA.id, source: 'SALE' },
+      include: { lines: true }
+    });
+    assert(saleJv && saleJv.lines && saleJv.lines.length >= 2, 'DB-12D', 'Database readback: JournalEntry for SALE with revenue and inventory/COGS lines created');
+
     // 11. Expenses (Scenario B): Create expense within cash balance, and reject when exceeding balance
     // Shift opening cash was 250, cash sale added 50 (total expectedCash = 300)
+    const baseBeforeExpense = await captureBaseline();
     const expenseRes = await fetch(`${baseUrl}/api/expenses`, {
       method: 'POST',
       headers: {
@@ -415,7 +487,23 @@ async function run() {
     const expenseData = await expenseRes.json();
     assert(expenseRes.status === 201 && expenseData.id, 'HTTP-13', 'Expenses: Operational expense recorded via POST /api/expenses');
 
-    // Attempt expense greater than available cash (amount 99999 > remaining cash)
+    const baseAfterExpense = await captureBaseline();
+    assert(baseAfterExpense.expenses === baseBeforeExpense.expenses + 1, 'DB-13A', 'Database readback: Expense count incremented by 1');
+    assert(baseAfterExpense.cashMovements === baseBeforeExpense.cashMovements + 1, 'DB-13B', 'Database readback: CashMovement count incremented by 1');
+    assert(baseAfterExpense.accountingOutbox === baseBeforeExpense.accountingOutbox + 1, 'DB-13C', 'Database readback: AccountingOutbox count incremented by 1');
+
+    const expCashMovement = await prisma.cashMovement.findFirst({
+      where: { shiftId, type: 'CASH_OUT' }
+    });
+    assert(expCashMovement && Number(expCashMovement.amount) === 30, 'DB-13D', 'Database readback: CashMovement CASH_OUT recorded for expense');
+
+    const expOutbox = await prisma.accountingOutbox.findFirst({
+      where: { eventType: 'EXPENSE_CREATED', status: 'PENDING' }
+    });
+    assert(expOutbox && expOutbox.payload && expOutbox.payload.expenseId === expenseData.id, 'DB-13E', 'Database readback: AccountingOutbox EXPENSE_CREATED event created with valid payload');
+
+    // Attempt expense greater than available cash (amount 999999 > remaining cash)
+    const baseBeforeExcessive = await captureBaseline();
     const excessiveExpenseRes = await fetch(`${baseUrl}/api/expenses`, {
       method: 'POST',
       headers: {
@@ -433,15 +521,13 @@ async function run() {
         paymentMethod: ExpensePaymentMethod.CASH
       })
     });
-    assert(excessiveExpenseRes.status === 400 || excessiveExpenseRes.status === 422 || !excessiveExpenseRes.ok, 'HTTP-13B', 'Expenses: Excessive expense exceeding available cash balance strictly rejected');
+    assert(excessiveExpenseRes.status === 400 || excessiveExpenseRes.status === 422 || !excessiveExpenseRes.ok, 'HTTP-13F', 'Expenses: Excessive expense exceeding available cash balance strictly rejected');
 
-    // Verify rejected expense left no trace in database
-    const rejectedExpenses = await prisma.expense.findMany({
-      where: { companyId: companyA.id, amount: 999999 }
-    });
-    assert(rejectedExpenses.length === 0, 'DB-13C', 'Database readback: No expense record created for rejected excessive expense');
+    const baseAfterExcessive = await captureBaseline();
+    assert(JSON.stringify(baseBeforeExcessive) === JSON.stringify(baseAfterExcessive), 'DB-13G', 'Database readback: Table counts unchanged after rejected excessive expense (no Expense, no CashMovement, no Outbox)');
 
-    // 12. Purchasing (Scenario D): Direct receive purchase order with additionalExpenses (Landed Cost)
+    // 12. Purchasing (Scenario D): Direct receive with LANDED_COST AND PERIOD_EXPENSE (RR6-02)
+    // 12A. LANDED_COST: additional expenses allocated to unit cost
     const purchaseRes = await fetch(`${baseUrl}/api/purchasing/receive`, {
       method: 'POST',
       headers: {
@@ -456,7 +542,7 @@ async function run() {
         expenseAllocationMethod: 'LANDED_COST',
         items: [{
           medicineId: medicineA.id,
-          batchNumber: `RECV-${stamp}`,
+          batchNumber: `RECV-LAND-${stamp}`,
           expiryDate: new Date(Date.now() + 500 * 24 * 3600 * 1000).toISOString().split('T')[0],
           quantity: 15,
           costPrice: 8,
@@ -465,16 +551,66 @@ async function run() {
       })
     });
     const purchaseData = await purchaseRes.json();
-    assert(purchaseRes.status === 201 || purchaseRes.status === 200, 'HTTP-14', 'Purchasing: Direct purchase receipt with additional expenses processed');
+    assert(purchaseRes.status === 201 || purchaseRes.status === 200, 'HTTP-14', 'Purchasing: Direct purchase receipt with LANDED_COST processed');
 
     // Verify Landed unit cost: base cost (8) + allocated expense (30 / 15 = 2) = 10
-    const receivedBatch = await prisma.batch.findFirst({
-      where: { batchNumber: `RECV-${stamp}`, branchId: branchA1.id }
+    const landedBatch = await prisma.batch.findFirst({
+      where: { batchNumber: `RECV-LAND-${stamp}`, branchId: branchA1.id }
     });
-    assert(receivedBatch && receivedBatch.quantityInBase === 15, 'DB-14B', 'Database readback: Received purchase quantity accurately added to batch');
-    assert(receivedBatch && Number(receivedBatch.costPrice) === 10, 'DB-14C', 'Database readback: Landed unit cost calculated accurately (8 base + 2 allocated expense = 10)');
+    assert(landedBatch && landedBatch.quantityInBase === 15 && Number(landedBatch.costPrice) === 10, 'DB-14A', 'Database readback: Landed unit cost calculated accurately (8 base + 2 allocated expense = 10)');
+
+    const landedOutbox = await prisma.accountingOutbox.findFirst({
+      where: { eventType: 'PURCHASE_RECEIVED', status: 'PENDING' }
+    });
+    assert(landedOutbox && landedOutbox.payload && landedOutbox.payload.expenseAllocationMethod === 'LANDED_COST', 'DB-14B', 'Database readback: Outbox PURCHASE_RECEIVED recorded with LANDED_COST allocation');
+
+    // 12B. PERIOD_EXPENSE: additional expenses NOT allocated to unit cost
+    const medicineA2 = await prisma.medicine.create({
+      data: {
+        code: `MED-EXP-${stamp}`,
+        barcode: `BAR-EXP-${stamp}`,
+        tradeName: `Amoxicillin ${stamp}`,
+        scientificName: 'Amoxicillin',
+        category: 'Antibiotic'
+      }
+    });
+
+    const periodPurchaseRes = await fetch(`${baseUrl}/api/purchasing/receive`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminTokenA}`
+      },
+      body: JSON.stringify({
+        companyId: companyA.id,
+        branchId: branchA1.id,
+        supplierId: supplierA.id,
+        additionalExpenses: 30,
+        expenseAllocationMethod: 'PERIOD_EXPENSE',
+        items: [{
+          medicineId: medicineA2.id,
+          batchNumber: `RECV-PER-${stamp}`,
+          expiryDate: new Date(Date.now() + 500 * 24 * 3600 * 1000).toISOString().split('T')[0],
+          quantity: 15,
+          costPrice: 8,
+          sellingPrice: 20
+        }]
+      })
+    });
+    assert(periodPurchaseRes.status === 201 || periodPurchaseRes.status === 200, 'HTTP-14C', 'Purchasing: Direct purchase receipt with PERIOD_EXPENSE processed');
+
+    const periodBatch = await prisma.batch.findFirst({
+      where: { batchNumber: `RECV-PER-${stamp}`, branchId: branchA1.id }
+    });
+    assert(periodBatch && periodBatch.quantityInBase === 15 && Number(periodBatch.costPrice) === 8, 'DB-14D', 'Database readback: PERIOD_EXPENSE unit cost strictly preserves base cost (8) without incorporating additional expenses');
+
+    const periodOutbox = await prisma.accountingOutbox.findFirst({
+      where: { eventType: 'PURCHASE_RECEIVED', status: 'PENDING', payload: { path: ['expenseAllocationMethod'], equals: 'PERIOD_EXPENSE' } }
+    });
+    assert(periodOutbox && periodOutbox.payload && periodOutbox.payload.expenseAllocationMethod === 'PERIOD_EXPENSE', 'DB-14E', 'Database readback: Outbox PURCHASE_RECEIVED recorded with PERIOD_EXPENSE allocation');
 
     // 13. Shifts (Scenario E): Concurrent Close with Promise.allSettled (Exactly 1 succeeds, 1 rejected)
+    const baseBeforeClose = await captureBaseline();
     const closePromises = [
       fetch(`${baseUrl}/api/shifts/${shiftId}/close`, {
         method: 'PATCH',
@@ -499,6 +635,9 @@ async function run() {
     const successCount = closeStatuses.filter(s => s === 200 || s === 201).length;
     const failCount = closeStatuses.filter(s => s >= 400).length;
     assert(successCount === 1 && failCount === 1, 'HTTP-15', 'Shifts: Concurrent close via Promise.allSettled resulted in exactly 1 SUCCESS and 1 REJECTED');
+
+    const baseAfterClose = await captureBaseline();
+    assert(baseAfterClose.cashMovements === baseBeforeClose.cashMovements, 'DB-15B', 'Database readback: No duplicate CashMovement created on shift close');
 
     // 14. Shifts: Prevent Subsequent Double Close
     const doubleCloseRes = await fetch(`${baseUrl}/api/shifts/${shiftId}/close`, {

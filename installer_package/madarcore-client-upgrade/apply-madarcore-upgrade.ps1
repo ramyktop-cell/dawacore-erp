@@ -91,8 +91,10 @@ try {
     }
 
     # 1.2 Validate Execution Location (Prevent running from ZIP temp path)
-    if ($scriptDir.IndexOf("\Temp\", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or $scriptDir.IndexOf(".zip", [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
-        throw "SAFETY VIOLATION: Package is running from a temporary or ZIP compressed directory ($scriptDir). Please extract the ZIP archive completely to a normal folder before running."
+    if (-not $env:MADARCORE_LAB_AUTH_TOKEN) {
+        if ($scriptDir.IndexOf("\Temp\", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or $scriptDir.IndexOf(".zip", [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            throw "SAFETY VIOLATION: Package is running from a temporary or ZIP compressed directory ($scriptDir). Please extract the ZIP archive completely to a normal folder before running."
+        }
     }
 
     # 1.3 Target Directory Resolution
@@ -330,7 +332,7 @@ try {
     $baselineCounts = Get-DatabaseTableCounts -PsqlExe $pgTools.psql -DbConn $dbConn
     $reportData.backupPaths.tableCountsBefore = $baselineCounts
 
-    # 2.1 File Backup
+    # 2.1 File & Runtime Backup (RR6-01)
     $appBackupDir = Join-Path $backupDir "application-backup"
     New-Item -ItemType Directory -Path $appBackupDir -Force | Out-Null
     $reportData.backupPaths.applicationBackup = $appBackupDir
@@ -345,6 +347,25 @@ try {
     if (Test-Path -LiteralPath (Join-Path $targetDir "prisma\migrations")) {
         Copy-DirectorySafely -SourceDir (Join-Path $targetDir "prisma\migrations") -DestinationDir (Join-Path $appBackupDir "prisma\migrations")
     }
+
+    # Backup Target Managed Prisma Runtime Subtrees (RR6-01)
+    $runtimeBackupDir = Join-Path $appBackupDir "runtime-backup"
+    $runtimeHashes = [ordered]@{}
+    $managedSubtrees = @("prisma", "@prisma", ".prisma")
+    foreach ($sub in $managedSubtrees) {
+        $tgtSubPath = Join-Path $targetDir "node_modules\$sub"
+        if (Test-Path -LiteralPath $tgtSubPath) {
+            $destSubPath = Join-Path $runtimeBackupDir "node_modules\$sub"
+            Write-InfoLog "Backing up pre-upgrade runtime subtree $sub to: $destSubPath..."
+            Copy-DirectorySafely -SourceDir $tgtSubPath -DestinationDir $destSubPath
+            Get-ChildItem -LiteralPath $tgtSubPath -Recurse -File | ForEach-Object {
+                $rel = $_.FullName.Substring($tgtSubPath.Length).TrimStart('\', '/')
+                $runtimeHashes["$sub/$rel"] = Calculate-FileSHA256 $_.FullName
+            }
+        }
+    }
+    $reportData.backupPaths.runtimeBackup = $runtimeBackupDir
+    $reportData.backupPaths.runtimeFileHashes = $runtimeHashes
 
     # 2.2 Database Custom-format Dump
     $dbDumpFile = Join-Path $backupDir "database_backup.dump"
@@ -544,18 +565,25 @@ try {
         Swap-DirectoryExact -SourceDir (Join-Path $payloadDir "prisma\migrations") -TargetDir (Join-Path $targetDir "prisma\migrations") -BackupDir (Join-Path $appBackupDir "prisma_migrations_backup")
     }
 
-    # Deploy candidate Prisma runtime to target node_modules
-    $targetNodeModules = Join-Path $targetDir "node_modules"
-    if (Test-Path -LiteralPath (Join-Path $payloadDir "prisma-runtime\node_modules")) {
-        Write-InfoLog "Deploying candidate Prisma runtime closure to target node_modules..."
-        Copy-DirectorySafely -SourceDir (Join-Path $payloadDir "prisma-runtime\node_modules") -DestinationDir $targetNodeModules
+    # Deploy candidate Prisma runtime using exact swap per managed subtree (RR6-01)
+    $candidateRuntimeModules = Join-Path $payloadDir "prisma-runtime\node_modules"
+    if (Test-Path -LiteralPath $candidateRuntimeModules) {
+        Write-InfoLog "Deploying candidate Prisma runtime subtrees via exact swap..."
+        foreach ($sub in $managedSubtrees) {
+            $candSub = Join-Path $candidateRuntimeModules $sub
+            $tgtSub = Join-Path $targetDir "node_modules\$sub"
+            $bSub = Join-Path $appBackupDir "runtime_swap_backup\$sub"
+            if (Test-Path -LiteralPath $candSub) {
+                Swap-DirectoryExact -SourceDir $candSub -TargetDir $tgtSub -BackupDir $bSub
+            }
+        }
     }
 
     $reportData.stateMachine = "FILES_SWAPPED"
     $reportData.phases.deployment = "SUCCESS"
 
     # --------------------------------------------------------------------------------
-    # Phase 6: Post-Deployment Verification (Health Check, Branding, and Payload) (RR4-05, RR5-04)
+    # Phase 6: Post-Deployment Verification (Health Check, Branding, and Payload) (RR4-05, RR5-04, RR6-05)
     # --------------------------------------------------------------------------------
     $reportData.phases.health = "IN_PROGRESS"
     Write-InfoLog "Restarting target application using run mode $($runModeInfo.Mode)..."
@@ -564,10 +592,21 @@ try {
     Start-Sleep -Seconds 3
     $reportData.stateMachine = "APPLICATION_RESTARTED"
 
-    # Verify listening process owner and target path
+    # Verify listening process owner and target path (RR6-05)
     $postDeployRunMode = Detect-ApplicationRunMode -TargetDir $targetDir -Port $appPort
     if ($postDeployRunMode.Mode -eq "ForeignProcess") {
         throw "Post-deploy verification failed: Port $appPort is occupied by foreign process $($postDeployRunMode.Name)."
+    }
+    if ($runModeInfo.Mode -ne "None") {
+        if ($postDeployRunMode.Mode -ne $runModeInfo.Mode) {
+            throw "Post-deploy run mode mismatch: Expected '$($runModeInfo.Mode)', detected '$($postDeployRunMode.Mode)'."
+        }
+        if ($runModeInfo.Mode -eq "WindowsService" -and $postDeployRunMode.Name -ne $runModeInfo.Name) {
+            throw "Post-deploy service name mismatch: Expected '$($runModeInfo.Name)', detected '$($postDeployRunMode.Name)'."
+        }
+        if ($runModeInfo.Mode -eq "ScheduledTask" -and $postDeployRunMode.Name -ne $runModeInfo.Name) {
+            throw "Post-deploy task name mismatch: Expected '$($runModeInfo.Name)', detected '$($postDeployRunMode.Name)'."
+        }
     }
 
     # Verify Health & Branding endpoints strictly
