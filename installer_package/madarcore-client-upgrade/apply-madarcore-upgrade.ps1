@@ -609,15 +609,16 @@ try {
         }
     }
 
-    # Verify Health & Branding endpoints strictly
+    # Verify Health & Branding endpoints strictly with full 60s timeout for cold boot (LC-05)
     $healthOk = $false
     $brandingOk = $false
     $healthUrl = "http://127.0.0.1:$appPort/api/health"
     $brandingUrl = "http://127.0.0.1:$appPort/api/branding"
+    $healthDeadline = (Get-Date).AddSeconds(60)
 
-    for ($i = 0; $i -lt 15; $i++) {
+    while ((Get-Date) -lt $healthDeadline) {
         try {
-            $resp = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
+            $resp = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
             if ($resp.StatusCode -eq 200) {
                 $hObj = $resp.Content | ConvertFrom-Json
                 if ($hObj -and $hObj.status -eq 'ok' -and $hObj.service -eq 'MadarCore ERP') {
@@ -625,18 +626,19 @@ try {
                 }
             }
 
-            $bResp = Invoke-WebRequest -Uri $brandingUrl -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
-            if ($bResp.StatusCode -eq 200) {
-                $bObj = $bResp.Content | ConvertFrom-Json
-                if ($bObj -and $bObj.platformName -eq 'MadarCore') {
-                    $brandingOk = $true
+            if ($healthOk) {
+                $bResp = Invoke-WebRequest -Uri $brandingUrl -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
+                if ($bResp.StatusCode -eq 200) {
+                    $bObj = $bResp.Content | ConvertFrom-Json
+                    if ($bObj -and $bObj.platformName -eq 'MadarCore') {
+                        $brandingOk = $true
+                    }
                 }
             }
 
             if ($healthOk -and $brandingOk) { break }
-        } catch {
-            Start-Sleep -Seconds 1
-        }
+        } catch {}
+        Start-Sleep -Milliseconds 500
     }
 
     if (-not $healthOk) {
@@ -675,20 +677,54 @@ try {
     $reportData.error = Sanitize-LogText $_.ToString()
     Save-Report $backupDir
 
-    # Stop failed process
-    try { Stop-ApplicationRunMode -RunModeInfo $runModeInfo -TargetDir $targetDir -Port $appPort | Out-Null } catch {}
-
-    # Perform Rollback using rollback-madarcore-upgrade.ps1
+    # LC-08: Safely terminate the currently running process on target port/directory
     try {
-        $rollbackScript = Join-Path $scriptDir "rollback-madarcore-upgrade.ps1"
-        & $rollbackScript -ReportPath (Join-Path $backupDir "upgrade-report.json") -TargetDirectory $targetDir -Force
+        Terminate-TargetProcessOnly -TargetDir $targetDir -Port $appPort | Out-Null
+    } catch {
+        Write-WarningLog "Could not terminate currently running target process: $_"
+    }
+
+    # LC-07: Perform Rollback and explicitly verify its exit code and report outcome
+    $rollbackScript = Join-Path $scriptDir "rollback-madarcore-upgrade.ps1"
+    $rollbackReportPath = Join-Path $backupDir "upgrade-report.json"
+    $rollbackExit = 1
+
+    try {
+        $rbEnv = @{}
+        if ($env:MADARCORE_LAB_AUTH_TOKEN) { $rbEnv["MADARCORE_LAB_AUTH_TOKEN"] = $env:MADARCORE_LAB_AUTH_TOKEN }
+        if ($env:MADARCORE_LAB_ROOT) { $rbEnv["MADARCORE_LAB_ROOT"] = $env:MADARCORE_LAB_ROOT }
+        $rbArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $rollbackScript, "-ReportPath", $rollbackReportPath, "-TargetDirectory", $targetDir, "-Force")
+        $rbRes = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments $rbArgs -EnvironmentVariables $rbEnv -TimeoutSeconds 300
+        $rollbackExit = $rbRes.ExitCode
+        if ($rbRes.StdOut) { Write-InfoLog $rbRes.StdOut }
+        if ($rbRes.StdErr) { Write-WarnLog $rbRes.StdErr }
+    } catch {
+        $rollbackExit = 1
+        $reportData.error = Sanitize-LogText "Rollback invocation error: $_"
+    }
+
+    # Verify disk report state to prevent false ROLLBACK_SUCCESS
+    if (Test-Path -LiteralPath $rollbackReportPath) {
+        try {
+            $diskReport = Get-Content -LiteralPath $rollbackReportPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($diskReport.stateMachine -eq "MANUAL_RECOVERY_REQUIRED" -or $diskReport.result -eq "MANUAL_RECOVERY_REQUIRED") {
+                $rollbackExit = 1
+            }
+        } catch {}
+    }
+
+    if ($rollbackExit -eq 0) {
         $reportData.stateMachine = "ROLLBACK_SUCCESS"
         $reportData.result = "ROLLBACK_SUCCESS"
+        Save-Report $backupDir
         Write-SuccessLog "Automatic rollback completed successfully. Application restored to previous state."
-    } catch {
+    } else {
         $reportData.stateMachine = "MANUAL_RECOVERY_REQUIRED"
         $reportData.result = "MANUAL_RECOVERY_REQUIRED"
-        $reportData.error = Sanitize-LogText "Rollback execution error: $_"
+        if (-not $reportData.error) {
+            $reportData.error = "Rollback tool failed or exited with non-zero exit code ($rollbackExit)."
+        }
+        Save-Report $backupDir
         Write-FailureLog "CRITICAL: Manual recovery required: $($reportData.error)"
     }
 

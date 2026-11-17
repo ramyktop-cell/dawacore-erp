@@ -1,6 +1,28 @@
 # رسائل التسليم
 
+## التسليم النشط — Level C Repair Cycle 10 / Rollback Engine
+
+```text
+المهمة 20261116-madarcore-offline-upgrade-repair، دورة الإصلاح 10، حالتها CHANGES_REQUESTED_LEVEL_C_ROLLBACK_ENGINE.
+اقرأ AGENTS.md وREPAIR_REQUEST.md وUPGRADE_REVIEW_REPORT_CYCLE_7.md.
+نفذ LC-05 وLC-06 وLC-07 وLC-08 فقط ضمن الملفات المسموحة.
+لا تعدل src/** أو prisma/** أو مشغل acceptance أو منطق الأعمال.
+أضف regression coverage، أعد build/package، وشغّل static verifier وFT matrix، وحدّث IMPLEMENTATION_REPORT.md.
+توقف عند READY_FOR_CODEX_LEVEL_C_RETEST_ROLLBACK دون تشغيل PostgreSQL الحقيقي أو إعلان PASS.
+```
+
 ## التسليم النشط — Level C Repair Cycle 8
+
+## التسليم النشط — Level C Repair Cycle 9 / HTTP-13
+
+```text
+المهمة 20261116-madarcore-offline-upgrade-repair، دورة الإصلاح 9، حالتها CHANGES_REQUESTED_LEVEL_C_HTTP13.
+اقرأ AGENTS.md وREPAIR_REQUEST.md وUPGRADE_REVIEW_REPORT_CYCLE_7.md.
+نفذ LC-04 فقط داخل tools/acceptance-upgrade.cjs: افتح وردية مستقلة للمدير واستخدم expenseShiftId في HTTP-13 وDB-13D وHTTP-13F.
+لا تعدل src/** أو prisma/** أو الصلاحيات أو خدمة المصروفات أو محرك الترقية.
+أعد build والحزمة، وشغّل static verifier وFT matrix، وحدّث IMPLEMENTATION_REPORT.md.
+توقف عند READY_FOR_CODEX_LEVEL_C_RETEST_HTTP13 دون تشغيل PostgreSQL أو إعلان PASS.
+```
 
 ```text
 المهمة 20261116-madarcore-offline-upgrade-repair، دورة الإصلاح 8، حالتها CHANGES_REQUESTED_LEVEL_C.

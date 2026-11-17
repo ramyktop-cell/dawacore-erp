@@ -353,9 +353,9 @@ public class Program {
     foreach ($f in $manifest11.files) {
         if ($f.path -eq $idxRel) { $f.sha256 = $newIdxHash }
     }
-    Set-Content (Join-Path $applyPkgFT11 "manifest.json") ($manifest11 | ConvertTo-Json -Depth 5)
+    [System.IO.File]::WriteAllText((Join-Path $applyPkgFT11 "manifest.json"), ($manifest11 | ConvertTo-Json -Depth 5), [System.Text.UTF8Encoding]::new($false))
 
-    $ft11Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $applyPkgFT11 "apply-madarcore-upgrade.ps1"), "-TargetDirectory", $labTargetFT11, "-NonInteractive") -EnvironmentVariables @{ "MADARCORE_LAB_AUTH_TOKEN" = $env:MADARCORE_LAB_AUTH_TOKEN; "MADARCORE_LAB_ROOT" = $env:MADARCORE_LAB_ROOT }
+    $ft11Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $applyPkgFT11 "apply-madarcore-upgrade.ps1"), "-TargetDirectory", $labTargetFT11, "-NonInteractive") -EnvironmentVariables @{ "MADARCORE_LAB_AUTH_TOKEN" = $env:MADARCORE_LAB_AUTH_TOKEN; "MADARCORE_LAB_ROOT" = $env:MADARCORE_LAB_ROOT } -TimeoutSeconds 300
     $mainAfter11 = if (Test-Path (Join-Path $labTargetFT11 "dist\main.js")) { Get-Content (Join-Path $labTargetFT11 "dist\main.js") -Raw } else { "" }
     $ft11Ok = ($ft11Res.ExitCode -ne 0 -and $mainAfter11 -match "ORIGINAL_FT11")
     Record-Test "FT-11" $ft11Ok "Production migration failure in apply-madarcore-upgrade initiates automated rollback and restores original files." $true
@@ -373,7 +373,7 @@ public class Program {
     # When apply runs, preflight & backup & temp db & swap will succeed.
     # Because target node.exe (LabDispatcher) does not listen on port 3099, health check fails after swap.
     # That triggers automatic rollback via rollback-madarcore-upgrade.ps1.
-    $ft12Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $applyScript, "-TargetDirectory", $labTargetFT12, "-NonInteractive") -EnvironmentVariables @{ "MADARCORE_LAB_AUTH_TOKEN" = $env:MADARCORE_LAB_AUTH_TOKEN; "MADARCORE_LAB_ROOT" = $env:MADARCORE_LAB_ROOT }
+    $ft12Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $applyScript, "-TargetDirectory", $labTargetFT12, "-NonInteractive") -EnvironmentVariables @{ "MADARCORE_LAB_AUTH_TOKEN" = $env:MADARCORE_LAB_AUTH_TOKEN; "MADARCORE_LAB_ROOT" = $env:MADARCORE_LAB_ROOT } -TimeoutSeconds 300
 
     $ft12BackupReport = Get-ChildItem -Path (Join-Path $labTargetFT12 "backups") -Recurse -Filter "upgrade-report.json" -ErrorAction SilentlyContinue | Select-Object -First 1
     $ft12Report = if ($ft12BackupReport) { Get-Content $ft12BackupReport.FullName | ConvertFrom-Json } else { $null }
@@ -394,7 +394,7 @@ public class Program {
     $labTargetFT13 = Join-Path $testSandboxRoot "LabFT13"
     New-MockClientInstallation $labTargetFT13 "FT13" $true
     Set-Content -LiteralPath (Join-Path $labTargetFT13 ".env") -Value "DATABASE_URL=`"postgresql://mock_user:mock_pass@127.0.0.1:5432/mock_client_db`"`r`nPORT=39871`r`nPLATFORM_NAME=MadarCore`r`n" -Encoding UTF8
-    $ft13Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $applyScript, "-TargetDirectory", $labTargetFT13, "-NonInteractive") -EnvironmentVariables @{ "MADARCORE_LAB_AUTH_TOKEN" = $env:MADARCORE_LAB_AUTH_TOKEN; "MADARCORE_LAB_ROOT" = $env:MADARCORE_LAB_ROOT }
+    $ft13Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $applyScript, "-TargetDirectory", $labTargetFT13, "-NonInteractive") -EnvironmentVariables @{ "MADARCORE_LAB_AUTH_TOKEN" = $env:MADARCORE_LAB_AUTH_TOKEN; "MADARCORE_LAB_ROOT" = $env:MADARCORE_LAB_ROOT } -TimeoutSeconds 300
     $ft13BackupReport = Get-ChildItem -Path (Join-Path $labTargetFT13 "backups") -Recurse -Filter "upgrade-report.json" -ErrorAction SilentlyContinue | Select-Object -First 1
     $ft13Report = if ($ft13BackupReport) { Get-Content $ft13BackupReport.FullName | ConvertFrom-Json } else { $null }
     $ft13Ok = ($ft13Res.ExitCode -ne 0 -and $ft13Report -and ($ft13Report.result -eq "ROLLBACK_SUCCESS" -or $ft13Report.result -eq "DEPLOYMENT_FAILED_ROLLED_BACK"))
@@ -408,7 +408,7 @@ public class Program {
     Set-Content -LiteralPath (Join-Path $labTargetFT14 "mock_server_malformed.flag") -Value "1" -Encoding UTF8
     Set-Content -LiteralPath (Join-Path $labTargetFT14 "mock_server_port.txt") -Value "39872" -Encoding UTF8
 
-    $ft14Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $applyScript, "-TargetDirectory", $labTargetFT14, "-NonInteractive") -EnvironmentVariables @{ "MADARCORE_LAB_AUTH_TOKEN" = $env:MADARCORE_LAB_AUTH_TOKEN; "MADARCORE_LAB_ROOT" = $env:MADARCORE_LAB_ROOT }
+    $ft14Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $applyScript, "-TargetDirectory", $labTargetFT14, "-NonInteractive") -EnvironmentVariables @{ "MADARCORE_LAB_AUTH_TOKEN" = $env:MADARCORE_LAB_AUTH_TOKEN; "MADARCORE_LAB_ROOT" = $env:MADARCORE_LAB_ROOT } -TimeoutSeconds 300
     $ft14BackupReport = Get-ChildItem -Path (Join-Path $labTargetFT14 "backups") -Recurse -Filter "upgrade-report.json" -ErrorAction SilentlyContinue | Select-Object -First 1
     $ft14Report = if ($ft14BackupReport) { Get-Content $ft14BackupReport.FullName | ConvertFrom-Json } else { $null }
     $ft14Ok = ($ft14Res.ExitCode -ne 0 -and $ft14Report -and ($ft14Report.result -eq "ROLLBACK_SUCCESS" -or $ft14Report.result -eq "DEPLOYMENT_FAILED_ROLLED_BACK"))
@@ -422,7 +422,7 @@ public class Program {
     Set-Content -LiteralPath (Join-Path $labTargetFT15 "mock_server_bad_branding.flag") -Value "1" -Encoding UTF8
     Set-Content -LiteralPath (Join-Path $labTargetFT15 "mock_server_port.txt") -Value "39873" -Encoding UTF8
 
-    $ft15Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $applyScript, "-TargetDirectory", $labTargetFT15, "-NonInteractive") -EnvironmentVariables @{ "MADARCORE_LAB_AUTH_TOKEN" = $env:MADARCORE_LAB_AUTH_TOKEN; "MADARCORE_LAB_ROOT" = $env:MADARCORE_LAB_ROOT }
+    $ft15Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $applyScript, "-TargetDirectory", $labTargetFT15, "-NonInteractive") -EnvironmentVariables @{ "MADARCORE_LAB_AUTH_TOKEN" = $env:MADARCORE_LAB_AUTH_TOKEN; "MADARCORE_LAB_ROOT" = $env:MADARCORE_LAB_ROOT } -TimeoutSeconds 300
     $ft15BackupReport = Get-ChildItem -Path (Join-Path $labTargetFT15 "backups") -Recurse -Filter "upgrade-report.json" -ErrorAction SilentlyContinue | Select-Object -First 1
     $ft15Report = if ($ft15BackupReport) { Get-Content $ft15BackupReport.FullName | ConvertFrom-Json } else { $null }
     $ft15Ok = ($ft15Res.ExitCode -ne 0 -and $ft15Report -and ($ft15Report.result -eq "ROLLBACK_SUCCESS" -or $ft15Report.result -eq "DEPLOYMENT_FAILED_ROLLED_BACK"))

@@ -222,14 +222,38 @@ if ($report.phases.deployment -eq "SUCCESS" -or $report.stateMachine -eq "PRODUC
         Execute-PostgresCommand -Executable $postgresTools.psql -Arguments @("-h", $dbMeta.host, "-p", $dbMeta.port.ToString(), "-U", $dbMeta.user, "-d", "postgres", "-c", $disconnectSql) -Password $dbPass | Out-Null
     }
 
-    # تنفيذ الاستعادة بـ pg_restore
+    # LC-06: إعادة تعيين مخطط public على قاعدة الهدف حصراً قبل الاستعادة بـ ON_ERROR_STOP
+    if (-not $postgresTools.psql) {
+        Write-FailureLog "CRITICAL: psql tool is missing. Cannot reset public schema. State is MANUAL_RECOVERY_REQUIRED."
+        exit 1
+    }
+
+    Write-InfoLog "إعادة ضبط مخطط public لقاعدة البيانات قبل الاستعادة النظيفة..."
+    $resetPublicSql = "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public AUTHORIZATION CURRENT_USER;"
+    $resetArgs = @(
+        "-h", $dbMeta.host,
+        "-p", $dbMeta.port.ToString(),
+        "-U", $dbMeta.user,
+        "-d", $dbMeta.database,
+        "-v", "ON_ERROR_STOP=1",
+        "-c", $resetPublicSql
+    )
+    $resetRes = Execute-PostgresCommand -Executable $postgresTools.psql -Arguments $resetArgs -Password $dbPass
+    if ($resetRes.ExitCode -ne 0) {
+        Write-FailureLog "فشل إعادة تعيين مخطط public لقاعدة البيانات. رمز الخطأ: $($resetRes.ExitCode)"
+        Write-FailureLog $resetRes.StdErr
+        Write-FailureLog "CRITICAL: Database schema reset failed. State is MANUAL_RECOVERY_REQUIRED."
+        exit 1
+    }
+    Write-SuccessLog "تمت إعادة ضبط مخطط public بنجاح."
+
+    # تنفيذ الاستعادة بـ pg_restore على المخطط النظيف مع --exit-on-error وبدون --clean/--if-exists
     $restoreArgs = @(
         "-h", $dbMeta.host,
         "-p", $dbMeta.port.ToString(),
         "-U", $dbMeta.user,
         "-d", $dbMeta.database,
-        "--clean",
-        "--if-exists",
+        "--exit-on-error",
         "--no-owner",
         "--no-privileges",
         $dbDumpFile
