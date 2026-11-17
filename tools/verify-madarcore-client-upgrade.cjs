@@ -119,13 +119,15 @@ for (const rf of requiredRootFiles) {
 }
 if (failures === 0) pass('All 7 required root package orchestration files are present.');
 
-// 3. Verify Payload Structure (including candidate Prisma runtime closure RR3-02)
+// 3. Verify Payload Structure (including candidate Prisma runtime closure RR3-02 and tools closure LC-09)
 const payloadDir = path.join(stagingDir, 'payload');
 const requiredPayloadItems = [
   'dist/main.js',
   'frontend/dist/index.html',
   'prisma/schema.prisma',
   'tools/acceptance-upgrade.cjs',
+  'tools/node_modules/bcryptjs/package.json',
+  'tools/node_modules/bcryptjs/umd/index.js',
   'prisma-runtime/node_modules/prisma/build/index.js'
 ];
 for (const pi of requiredPayloadItems) {
@@ -134,7 +136,36 @@ for (const pi of requiredPayloadItems) {
     fail(`Required payload component missing: ${pi}`);
   }
 }
-if (failures === 0) pass('Candidate payload (dist, frontend/dist, prisma, acceptance runner, prisma-runtime) is complete.');
+if (failures === 0) pass('Candidate payload (dist, frontend/dist, prisma, acceptance runner, tools dependencies, prisma-runtime) is complete.');
+
+// 3.5 Verify Package Closure: module resolution for acceptance runner dependencies (LC-09)
+const acceptanceScriptPath = path.join(payloadDir, 'tools', 'acceptance-upgrade.cjs');
+if (fs.existsSync(acceptanceScriptPath)) {
+  try {
+    const createReq = require('module').createRequire;
+    const acceptanceRequire = createReq(acceptanceScriptPath);
+    const resolvedBcryptPath = acceptanceRequire.resolve('bcryptjs');
+    const normalizedResolved = path.resolve(resolvedBcryptPath).toLowerCase();
+    const normalizedStaging = path.resolve(stagingDir).toLowerCase();
+
+    if (!normalizedResolved.startsWith(normalizedStaging)) {
+      fail(`CRITICAL: bcryptjs resolved outside package boundary! Resolved to: ${resolvedBcryptPath}`);
+    } else {
+      const bcrypt = acceptanceRequire('bcryptjs');
+      const testPassword = 'TestClosurePassword!2026';
+      const testHash = bcrypt.hashSync(testPassword, 10);
+      const isMatch = bcrypt.compareSync(testPassword, testHash);
+      const isBadMatch = bcrypt.compareSync('WrongPassword', testHash);
+      if (isMatch && !isBadMatch) {
+        pass(`Package closure verified: bcryptjs resolves inside package (${resolvedBcryptPath}) and passes hash/compare smoke test.`);
+      } else {
+        fail('Package closure smoke test failed: bcryptjs hash/compare returned unexpected results.');
+      }
+    }
+  } catch (err) {
+    fail(`Package closure verification failed to resolve/execute bcryptjs from acceptance-upgrade.cjs: ${err.message}`);
+  }
+}
 
 // 4. Verify Forbidden Files are ABSENT from package
 const forbiddenPaths = [
@@ -247,6 +278,49 @@ if (!fs.existsSync(zipPath) || fs.statSync(zipPath).size === 0) {
     } else {
       pass(`ZIP archive (${(fs.statSync(zipPath).size / 1024 / 1024).toFixed(2)} MB) verified with external SHA-256.`);
     }
+  }
+
+  // LC-09: Isolated-extraction check from ZIP archive outside repo
+  const os = require('os');
+  const tempExtractDir = fs.mkdtempSync(path.join(os.tmpdir(), 'madarcore_verify_zip_'));
+  try {
+    execSync(`tar -xf "${zipPath}" -C "${tempExtractDir}"`);
+    const extractedTarget = fs.existsSync(path.join(tempExtractDir, releaseId))
+      ? path.join(tempExtractDir, releaseId)
+      : tempExtractDir;
+    const extractedAcceptanceScript = path.join(extractedTarget, 'payload', 'tools', 'acceptance-upgrade.cjs');
+    if (!fs.existsSync(extractedAcceptanceScript)) {
+      fail(`Isolated ZIP extraction check failed: acceptance-upgrade.cjs missing at ${extractedAcceptanceScript}`);
+    } else {
+      const createReq = require('module').createRequire;
+      const extractedRequire = createReq(extractedAcceptanceScript);
+      const resolvedFromZip = extractedRequire.resolve('bcryptjs');
+      const normalizedZipResolved = path.resolve(resolvedFromZip).toLowerCase();
+      const normalizedZipTarget = path.resolve(extractedTarget).toLowerCase();
+      const normalizedRoot = path.resolve(ROOT).toLowerCase();
+
+      if (normalizedZipResolved.startsWith(normalizedRoot)) {
+        fail(`CRITICAL: bcryptjs resolved to parent repository node_modules instead of inside extracted ZIP! Path: ${resolvedFromZip}`);
+      } else if (!normalizedZipResolved.startsWith(normalizedZipTarget)) {
+        fail(`CRITICAL: bcryptjs resolved outside extracted ZIP target! Path: ${resolvedFromZip}`);
+      } else {
+        const bcrypt = extractedRequire('bcryptjs');
+        const smokeHash = bcrypt.hashSync('ZipSmoke123', 10);
+        const smokeMatch = bcrypt.compareSync('ZipSmoke123', smokeHash);
+        const smokeBad = bcrypt.compareSync('BadPass', smokeHash);
+        if (smokeMatch && !smokeBad) {
+          pass(`Isolated ZIP extraction check: bcryptjs resolves strictly inside extracted package (${resolvedFromZip}) and passes hash/compare smoke test.`);
+        } else {
+          fail('Isolated ZIP extraction smoke test failed: hash/compare returned invalid boolean.');
+        }
+      }
+    }
+  } catch (zipErr) {
+    fail(`Isolated ZIP extraction check failed: ${zipErr.message}`);
+  } finally {
+    try {
+      fs.rmSync(tempExtractDir, { recursive: true, force: true });
+    } catch {}
   }
 }
 

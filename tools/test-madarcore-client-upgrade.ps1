@@ -1,6 +1,6 @@
 ﻿# ================================================================================
 # test-madarcore-client-upgrade.ps1
-# Isolated Lab Test Runner & Comprehensive FT Matrix (FT-01..FT-24) (RR4-02)
+# Isolated Lab Test Runner & Comprehensive FT Matrix (FT-01..FT-25, MIG-01..MIG-06) (RR4-02, LC-09)
 # Tests the real production upgrade engine using Lab fault injection outside ZIP!
 # ZERO literal ($true) assertions!
 # ================================================================================
@@ -581,6 +581,49 @@ public class Program {
         $errorCaught = $true
     }
     Record-Test "FT-24" ($atomicSuccess -and $errorCaught) "Save-UpgradeReport writes atomic report and handles invalid destination safely." $false
+
+    # =========================================================================
+    # FT-25: Isolated package closure & module resolution (LC-09)
+    # =========================================================================
+    Write-Host "`n--- Testing FT-25: Isolated package closure & module resolution ---" -ForegroundColor Cyan
+    $isolatedClosureDir = Join-Path $testSandboxRoot "IsolatedClosure"
+    New-Item -ItemType Directory -Path $isolatedClosureDir -Force | Out-Null
+    Copy-Item -Path $packageDir -Destination (Join-Path $isolatedClosureDir "Package") -Recurse -Force
+    $isolatedPkg = Join-Path $isolatedClosureDir "Package"
+    $isolatedAcceptanceScript = Join-Path $isolatedPkg "payload\tools\acceptance-upgrade.cjs"
+
+    $closureCheckScript = @"
+const path = require('path');
+const createReq = require('module').createRequire;
+const acceptanceScript = process.argv[2];
+const pkgTarget = process.argv[3];
+try {
+    const req = createReq(acceptanceScript);
+    const resolved = req.resolve('bcryptjs');
+    const bcrypt = req('bcryptjs');
+    const hash = bcrypt.hashSync('IsolatedSmokeTest2026', 10);
+    const ok = bcrypt.compareSync('IsolatedSmokeTest2026', hash);
+    const bad = bcrypt.compareSync('Wrong', hash);
+    const isInside = path.resolve(resolved).toLowerCase().startsWith(path.resolve(pkgTarget).toLowerCase());
+    const isInsideRepo = path.resolve(resolved).toLowerCase().includes('dawacore\\node_modules');
+    if (isInside && !isInsideRepo && ok && !bad) {
+        console.log(resolved);
+        process.exit(0);
+    } else {
+        console.error('Invalid resolution location or compare check failed:', resolved);
+        process.exit(1);
+    }
+} catch (e) {
+    console.error('Failed to resolve or run bcryptjs:', e.message);
+    process.exit(1);
+}
+"@
+    $closureScriptPath = Join-Path $isolatedClosureDir "check_closure.js"
+    Set-Content -LiteralPath $closureScriptPath -Value $closureCheckScript -Encoding UTF8
+    $closureRes = Execute-NativeProcessSafely -Executable "node.exe" -Arguments @($closureScriptPath, $isolatedAcceptanceScript, $isolatedPkg)
+    $closureResolvedPath = if ($closureRes.StdOut) { $closureRes.StdOut.Trim() } else { "" }
+    $ft25Ok = ($closureRes.ExitCode -eq 0 -and $closureResolvedPath -ne "" -and ($closureResolvedPath.ToLower().StartsWith($isolatedPkg.ToLower())))
+    Record-Test "FT-25" $ft25Ok "Isolated package closure proves anchored require('bcryptjs') resolves strictly inside extracted package without parent repository modules." $false
 
     # =========================================================================
     # Migration Audit Condition Standalone Tests (RR6-06)

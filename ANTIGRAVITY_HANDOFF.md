@@ -1,65 +1,15 @@
-# رسائل التسليم
-
-## التسليم النشط — Level C Repair Cycle 10 / Rollback Engine
+# ANTIGRAVITY_HANDOFF
 
 ```text
-المهمة 20261116-madarcore-offline-upgrade-repair، دورة الإصلاح 10، حالتها CHANGES_REQUESTED_LEVEL_C_ROLLBACK_ENGINE.
-اقرأ AGENTS.md وREPAIR_REQUEST.md وUPGRADE_REVIEW_REPORT_CYCLE_7.md.
-نفذ LC-05 وLC-06 وLC-07 وLC-08 فقط ضمن الملفات المسموحة.
-لا تعدل src/** أو prisma/** أو مشغل acceptance أو منطق الأعمال.
-أضف regression coverage، أعد build/package، وشغّل static verifier وFT matrix، وحدّث IMPLEMENTATION_REPORT.md.
-توقف عند READY_FOR_CODEX_LEVEL_C_RETEST_ROLLBACK دون تشغيل PostgreSQL الحقيقي أو إعلان PASS.
-```
+المهمة 20261116-madarcore-offline-upgrade-repair، دورة الإصلاح 11، حالتها CHANGES_REQUESTED_LEVEL_C_PACKAGE_CLOSURE.
 
-## التسليم النشط — Level C Repair Cycle 8
+اقرأ AGENTS.md وREVIEW_REPORT.md وREPAIR_REQUEST.md بالكامل. أصلح LC-09 فقط.
 
-## التسليم النشط — Level C Repair Cycle 9 / HTTP-13
+السبب المثبت: الحزمة المستخرجة خارج E:\DawaCore لا تحتوي bcryptjs، بينما الاختبارات السابقة وجدتها بالخطأ من E:\DawaCore\node_modules. لذلك فشل acceptance الحقيقي بعد نجاح preflight وbackup وrestore و7 migrations المؤقتة، وقبل deployment.
 
-```text
-المهمة 20261116-madarcore-offline-upgrade-repair، دورة الإصلاح 9، حالتها CHANGES_REQUESTED_LEVEL_C_HTTP13.
-اقرأ AGENTS.md وREPAIR_REQUEST.md وUPGRADE_REVIEW_REPORT_CYCLE_7.md.
-نفذ LC-04 فقط داخل tools/acceptance-upgrade.cjs: افتح وردية مستقلة للمدير واستخدم expenseShiftId في HTTP-13 وDB-13D وHTTP-13F.
-لا تعدل src/** أو prisma/** أو الصلاحيات أو خدمة المصروفات أو محرك الترقية.
-أعد build والحزمة، وشغّل static verifier وFT matrix، وحدّث IMPLEMENTATION_REPORT.md.
-توقف عند READY_FOR_CODEX_LEVEL_C_RETEST_HTTP13 دون تشغيل PostgreSQL أو إعلان PASS.
-```
+عدّل فقط build-madarcore-client-upgrade.ps1 وverify-madarcore-client-upgrade.cjs وtest-madarcore-client-upgrade.ps1 والتقرير والمخرجات المولدة. ضع bcryptjs فقط داخل payload/tools/node_modules/bcryptjs، وأضف فحصًا واختبارًا من ZIP مستخرج في مسار مستقل يثبت أن module.createRequire المثبت عند acceptance-upgrade.cjs يحل المكتبة من داخل الحزمة ويشغل hash/compare smoke test.
 
-```text
-المهمة 20261116-madarcore-offline-upgrade-repair، دورة الإصلاح 8، حالتها CHANGES_REQUESTED_LEVEL_C.
-اقرأ AGENTS.md وREPAIR_REQUEST.md وUPGRADE_REVIEW_REPORT_CYCLE_7.md.
-نفذ LC-01 وLC-02 وLC-03 فقط ضمن الملفات المسموحة.
-لا تغيّر schema أو migrations أو منطق الأعمال أو عقود health/branding.
-أعد build والحزمة، وشغّل static verifier وFT matrix، وحدّث IMPLEMENTATION_REPORT.md.
-توقف عند READY_FOR_CODEX_LEVEL_C_RETEST؛ لا تشغّل مختبر PostgreSQL ولا تعلن Level C PASS ولا ترسل ZIP للعميل.
-```
+ممنوع تعديل src/** أو frontend/src/** أو prisma/** أو tools/acceptance-upgrade.cjs أو apply/rollback أو منطق الأعمال والصلاحيات.
 
-تُملأ معرفات المهمة والمراجعة قبل استخدام أي رسالة. اقرأ AI_DEVELOPMENT_WORKFLOW.md وAGENTS.md أولاً.
-
-## من Codex إلى Antigravity — تنفيذ
-
-```text
-نفذ المهمة <TASK_ID> وفق IMPLEMENTATION_PLAN.md، المراجعة <REVISION>، وحالتها PLAN_READY.
-اقرأ AGENTS.md والخطة والملفات المرتبطة. احفظ baseline قبل التعديل.
-عدّل الملفات المذكورة في Allowed files فقط. احفظ أي تعديلات سابقة للمستخدم.
-نفذ معايير القبول والاختبارات المحددة، ووثق الأوامر والنتائج والأدلة والفروق في IMPLEMENTATION_REPORT.md.
-إذا ظهر احتياج خارج الحدود، وثقه وأعده إلى Codex قبل توسيع العمل.
-عند الانتهاء ضع READY_FOR_REVIEW وتوقف عن التعديل. لا تصدر PASS أو تنشر خارج تفويض الخطة.
-```
-
-## من Antigravity إلى Codex — مراجعة
-
-```text
-المهمة <TASK_ID> جاهزة للمراجعة، وفق الخطة <REVISION>.
-IMPLEMENTATION_REPORT.md يتضمن الملفات والفروق والاختبارات والقيود.
-النسخة النهائية/البصمات: <LOCATION>، والنسخة المرجعية: <LOCATION>.
-توقف التنفيذ. راجع الفروق الفعلية ومعايير القبول، واكتب REVIEW_REPORT.md.
-```
-
-## من Codex إلى Antigravity — إصلاح فقط
-
-```text
-راجع REPAIR_REQUEST.md للمهمة <TASK_ID>، دورة <CYCLE>، وحالتها CHANGES_REQUESTED.
-أصلح العيوب <ISSUE_IDS> فقط ضمن الملفات المسموحة في الطلب.
-احتفظ ببقية الوظائف والتعديلات. نفذ اختبارات الإصلاح والرجوع وحدّث IMPLEMENTATION_REPORT.md.
-عند الانتهاء ضع READY_FOR_REVIEW وتوقف عن التعديل ليعيد Codex المراجعة.
+أعد البناء، static verifier، FT matrix، manifest وZIP SHA. وثق المسار الفعلي الذي حُلّت منه bcryptjs والبصمات. ضع الحالة READY_FOR_CODEX_LEVEL_C_RETEST_PACKAGE_CLOSURE وتوقف دون تشغيل PostgreSQL الحقيقي أو إعلان Level C PASS أو إرسال الحزمة للعميل.
 ```

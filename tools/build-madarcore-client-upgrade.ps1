@@ -85,10 +85,30 @@ New-Item -ItemType Directory -Path $prismaPayload -Force | Out-Null
 Copy-Item (Join-Path $rootDir "prisma\schema.prisma") (Join-Path $prismaPayload "schema.prisma") -Force
 Copy-Item -Path (Join-Path $rootDir "prisma\migrations") -Destination (Join-Path $prismaPayload "migrations") -Recurse -Force
 
-Write-Host "[INFO] Copying candidate acceptance runner..." -ForegroundColor Cyan
+Write-Host "[INFO] Copying candidate acceptance runner & runtime dependencies..." -ForegroundColor Cyan
 $toolsPayload = Join-Path $payloadDir "tools"
 New-Item -ItemType Directory -Path $toolsPayload -Force | Out-Null
 Copy-Item (Join-Path $rootDir "tools\acceptance-upgrade.cjs") (Join-Path $toolsPayload "acceptance-upgrade.cjs") -Force
+
+# LC-09: Package bcryptjs runtime dependency into payload/tools/node_modules/bcryptjs
+$bcryptSrcDir = Join-Path $rootDir "node_modules\bcryptjs"
+$bcryptPkgJson = Join-Path $bcryptSrcDir "package.json"
+$bcryptUmdEntry = Join-Path $bcryptSrcDir "umd\index.js"
+if (-not (Test-Path -LiteralPath $bcryptPkgJson) -or -not (Test-Path -LiteralPath $bcryptUmdEntry)) {
+    throw "Build Gate Failure: bcryptjs runtime dependency is missing package.json or umd/index.js at $bcryptSrcDir"
+}
+
+$toolsNodeModules = Join-Path $toolsPayload "node_modules"
+New-Item -ItemType Directory -Path $toolsNodeModules -Force | Out-Null
+$bcryptDestDir = Join-Path $toolsNodeModules "bcryptjs"
+Copy-Item -Path $bcryptSrcDir -Destination $bcryptDestDir -Recurse -Force
+if (-not (Test-Path -LiteralPath (Join-Path $bcryptDestDir "package.json")) -or -not (Test-Path -LiteralPath (Join-Path $bcryptDestDir "umd\index.js"))) {
+    throw "Build Gate Failure: Packaged bcryptjs is missing package.json or umd/index.js at $bcryptDestDir"
+}
+
+Get-ChildItem -LiteralPath $toolsNodeModules -Recurse -File | Where-Object { $_.Name -match '\.tmp' } | ForEach-Object {
+    Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+}
 
 # 5. Populate Candidate Prisma Runtime Closure
 Write-Host "[INFO] Assembling candidate Prisma runtime closure under payload/prisma-runtime..." -ForegroundColor Cyan
@@ -151,30 +171,6 @@ $manifestJsonStr = $manifestObj | ConvertTo-Json -Depth 5
 
 Write-Host "[SUCCESS] manifest.json generated with $($filesList.Count) files." -ForegroundColor Green
 
-# 6.5 Run Pre-Packaging Gates: Static Verifier & FT Matrix (RR6-04)
-if (-not $SkipTests -and -not $PackageOnly) {
-    Write-Host "[GATE] Verifying staged package with static verifier..." -ForegroundColor Cyan
-    & node (Join-Path $rootDir "tools\verify-madarcore-client-upgrade.cjs")
-    if ($LASTEXITCODE -ne 0) {
-        Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
-        throw "Build Gate Failure: Static verifier rejected staged package."
-    }
-
-    if (-not $env:MADARCORE_BUILD_RUNNING) {
-        $env:MADARCORE_BUILD_RUNNING = "1"
-        try {
-            Write-Host "[GATE] Running Comprehensive FT Matrix against staged package..." -ForegroundColor Cyan
-            & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $rootDir "tools\test-madarcore-client-upgrade.ps1")
-            if ($LASTEXITCODE -ne 0) {
-                Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
-                throw "Build Gate Failure: FT test matrix failed on staged package."
-            }
-        } finally {
-            $env:MADARCORE_BUILD_RUNNING = $null
-        }
-    }
-}
-
 # 7. Create Standalone ZIP Archive
 if (Test-Path -LiteralPath $zipOutputPath) {
     Remove-Item -LiteralPath $zipOutputPath -Force
@@ -196,8 +192,35 @@ try {
 
 $zipSizeMB = [Math]::Round(((Get-Item $zipOutputPath).Length / 1MB), 2)
 Set-Content -LiteralPath "$zipOutputPath.sha256" -Value "$zipSha256  $releaseId.zip" -Encoding UTF8
+Write-Host "[SUCCESS] Standalone ZIP archive created ($zipSizeMB MB) with SHA256: $zipSha256" -ForegroundColor Green
 
-# 8. Post-Build ZIP Verification in Isolated Temp Extraction (RR4-07)
+# 8. Run Gates: Static Verifier & FT Matrix (RR6-04, LC-09)
+if (-not $SkipTests -and -not $PackageOnly) {
+    Write-Host "[GATE] Verifying staged package and ZIP archive with static verifier..." -ForegroundColor Cyan
+    & node (Join-Path $rootDir "tools\verify-madarcore-client-upgrade.cjs")
+    if ($LASTEXITCODE -ne 0) {
+        Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $zipOutputPath -Force -ErrorAction SilentlyContinue
+        throw "Build Gate Failure: Static verifier rejected staged package or ZIP archive."
+    }
+
+    if (-not $env:MADARCORE_BUILD_RUNNING) {
+        $env:MADARCORE_BUILD_RUNNING = "1"
+        try {
+            Write-Host "[GATE] Running Comprehensive FT Matrix against staged package..." -ForegroundColor Cyan
+            & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $rootDir "tools\test-madarcore-client-upgrade.ps1")
+            if ($LASTEXITCODE -ne 0) {
+                Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
+                Remove-Item -LiteralPath $zipOutputPath -Force -ErrorAction SilentlyContinue
+                throw "Build Gate Failure: FT test matrix failed on staged package."
+            }
+        } finally {
+            $env:MADARCORE_BUILD_RUNNING = $null
+        }
+    }
+}
+
+# 9. Post-Build ZIP Verification in Isolated Temp Extraction (RR4-07)
 Write-Host "[INFO] Verifying created ZIP archive via isolated temp extraction..." -ForegroundColor Cyan
 $testExtractDir = Join-Path $env:TEMP "MadarCore_Zip_Extract_$([Guid]::NewGuid().ToString('N'))"
 try {
