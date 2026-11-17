@@ -452,17 +452,32 @@ async function run() {
 
     // Readback InventoryTransaction SALE
     const invTx = await prisma.inventoryTransaction.findFirst({
-      where: { referenceId: dbInvoice.invoiceNumber, type: 'SALE' }
+      where: { referenceId: dbInvoice.invoiceNumber, transactionType: 'SALE' }
     });
-    assert(invTx && Number(invTx.quantity) === 2 && Number(invTx.unitCost) === 10, 'DB-12C', 'Database readback: InventoryTransaction SALE created with referenceId and accurate unitCost (10)');
+    assert(
+      invTx &&
+      Number(invTx.quantity) === -2 &&
+      Number(invTx.unitCost) === 10,
+      'DB-12C',
+      'Database readback: SALE inventory issue recorded as -2 at unit cost 10'
+    );
 
-    // Readback accounting effect (JournalEntry for SALE)
-    await sleep(500);
-    const saleJv = await prisma.journalEntry.findFirst({
-      where: { companyId: companyA.id, source: 'SALE' },
-      include: { lines: true }
-    });
-    assert(saleJv && saleJv.lines && saleJv.lines.length >= 2, 'DB-12D', 'Database readback: JournalEntry for SALE with revenue and inventory/COGS lines created');
+    // Readback accounting effect (JournalEntry for SALE) with real bounded polling
+    let saleJv = null;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      saleJv = await prisma.journalEntry.findFirst({
+        where: { companyId: companyA.id, source: 'SALE' },
+        include: { lines: true }
+      });
+      if (saleJv?.lines?.length >= 2) break;
+      await sleep(500);
+    }
+
+    assert(
+      saleJv && saleJv.lines && saleJv.lines.length >= 2,
+      'DB-12D',
+      'Database readback: JournalEntry for SALE with revenue and inventory/COGS lines created'
+    );
 
     // 11. Expenses (Scenario B): Create expense within cash balance, and reject when exceeding balance
     // Shift opening cash was 250, cash sale added 50 (total expectedCash = 300)
