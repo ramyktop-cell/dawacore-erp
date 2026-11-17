@@ -1,5 +1,16 @@
 # رسائل التسليم
 
+## التسليم النشط — Level C Repair Cycle 8
+
+```text
+المهمة 20261116-madarcore-offline-upgrade-repair، دورة الإصلاح 8، حالتها CHANGES_REQUESTED_LEVEL_C.
+اقرأ AGENTS.md وREPAIR_REQUEST.md وUPGRADE_REVIEW_REPORT_CYCLE_7.md.
+نفذ LC-01 وLC-02 وLC-03 فقط ضمن الملفات المسموحة.
+لا تغيّر schema أو migrations أو منطق الأعمال أو عقود health/branding.
+أعد build والحزمة، وشغّل static verifier وFT matrix، وحدّث IMPLEMENTATION_REPORT.md.
+توقف عند READY_FOR_CODEX_LEVEL_C_RETEST؛ لا تشغّل مختبر PostgreSQL ولا تعلن Level C PASS ولا ترسل ZIP للعميل.
+```
+
 تُملأ معرفات المهمة والمراجعة قبل استخدام أي رسالة. اقرأ AI_DEVELOPMENT_WORKFLOW.md وAGENTS.md أولاً.
 
 ## من Codex إلى Antigravity — تنفيذ
