@@ -90,10 +90,15 @@ public class Program {
                 Console.WriteLine("1");
                 return 0;
             }
+            string migFile = Path.Combine(baseDir, "psql_migrations.out");
+            if (File.Exists(migFile) && joinedArgs.Contains("_prisma_migrations")) {
+                Console.WriteLine(File.ReadAllText(migFile).Trim());
+                return 0;
+            }
             if (joinedArgs.Contains("_prisma_migrations")) {
-                string migData = "20260907000000_init_inventory_core|checksum1|2026-09-07 00:00:00|\n" +
-                                 "20260907010000_add_purchasing_module|checksum2|2026-09-07 01:00:00|\n" +
-                                 "20260907020000_add_sales_shifts_and_held_carts|checksum3|2026-09-07 02:00:00|\n";
+                string migData = "20260907000000_init_inventory_core|d58a9de3da419a6f302393194aa174c7ee400c5ea2664e86af06d385e89acad7|2026-09-07 00:00:00|\n" +
+                                 "20260907010000_add_purchasing_module|74bc8958ae943fa2525df4c437f440d109eb7ced29c84ff99dceab2423dfa1bf|2026-09-07 01:00:00|\n" +
+                                 "20260907020000_add_sales_shifts_and_held_carts|f9043e987c1cd0ccca1dc6526e242ccf43bdf097cddd37da6f5668b28d9cabea|2026-09-07 02:00:00|\n";
                 Console.WriteLine(migData);
                 return 0;
             }
@@ -269,12 +274,12 @@ public class Program {
     Record-Test "FT-08" $ft08Ok "Temporary database failure halts execution before production deployment." $true
 
     # =========================================================================
-    # FT-09: Business acceptance runner contract (RR4-01, RR4-02)
+    # FT-09: Business acceptance runner safety contract (RR4-01, RR5-01)
     # =========================================================================
     Write-Host "`n--- Testing FT-09: Business acceptance safety guards & contracts ---" -ForegroundColor Cyan
     $accRunner = Join-Path $packageDir "payload\tools\acceptance-upgrade.cjs"
     $accRes = Execute-NativeProcessSafely -Executable "node.exe" -Arguments @($accRunner)
-    Record-Test "FT-09" ($accRes.ExitCode -ne 0 -and ($accRes.StdErr -match "DATABASE_URL is not set" -or $accRes.StdOut -match "SAFETY VIOLATION")) "Acceptance runner rejects missing DATABASE_URL and non-acceptance databases." $true
+    Record-Test "FT-09" ($accRes.ExitCode -ne 0 -and ($accRes.StdErr -match "DATABASE_URL is not set" -or $accRes.StdOut -match "SAFETY VIOLATION")) "Acceptance runner rejects missing DATABASE_URL and non-acceptance databases [ACCEPTANCE_CONTRACT_AND_SAFETY_ONLY]." $true
 
     # =========================================================================
     # FT-10: Temp DB cleanup safety (RR4-02)
@@ -288,22 +293,43 @@ public class Program {
     Record-Test "FT-10" ($ft10Res.ExitCode -ne 0) "Temporary database cleanup failure is detected and prevents unsafe deployment." $true
 
     # =========================================================================
-    # FT-11 & FT-12: Automated rollback and exact directory swap (RR4-02)
+    # FT-11: Production migration failure triggers automatic rollback (RR5-02)
     # =========================================================================
-    Write-Host "`n--- Testing FT-11 & FT-12: Rollback and exact directory swap ---" -ForegroundColor Cyan
+    Write-Host "`n--- Testing FT-11: Production migration failure initiates automated rollback ---" -ForegroundColor Cyan
+    $labTargetFT11 = Join-Path $testSandboxRoot "LabFT11"
+    New-MockClientInstallation $labTargetFT11 "ORIGINAL_FT11" $true
+    Set-Content -LiteralPath (Join-Path $labTargetFT11 "prerequisites\pgsql\bin\createdb.exit") -Value "0"
+    $applyPkgFT11 = Join-Path $testSandboxRoot "PkgFT11"
+    Copy-Item -Path $packageDir -Destination $applyPkgFT11 -Recurse -Force
+    Set-Content -LiteralPath (Join-Path $applyPkgFT11 "payload\prisma-runtime\node_modules\prisma\build\index.js") -Value "throw new Error('Simulated Prisma migrate deploy production failure');"
+    $idxRel = "payload/prisma-runtime/node_modules/prisma/build/index.js"
+    $newIdxHash = Calculate-FileSHA256 (Join-Path $applyPkgFT11 $idxRel.Replace('/', '\'))
+    $manifest11 = Get-Content (Join-Path $applyPkgFT11 "manifest.json") | ConvertFrom-Json
+    foreach ($f in $manifest11.files) {
+        if ($f.path -eq $idxRel) { $f.sha256 = $newIdxHash }
+    }
+    Set-Content (Join-Path $applyPkgFT11 "manifest.json") ($manifest11 | ConvertTo-Json -Depth 5)
+
+    $ft11Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $applyPkgFT11 "apply-madarcore-upgrade.ps1"), "-TargetDirectory", $labTargetFT11, "-NonInteractive") -EnvironmentVariables @{ "MADARCORE_LAB_AUTH_TOKEN" = $env:MADARCORE_LAB_AUTH_TOKEN; "MADARCORE_LAB_ROOT" = $env:MADARCORE_LAB_ROOT }
+    $mainAfter11 = if (Test-Path (Join-Path $labTargetFT11 "dist\main.js")) { Get-Content (Join-Path $labTargetFT11 "dist\main.js") -Raw } else { "" }
+    $ft11Ok = ($ft11Res.ExitCode -ne 0 -and $mainAfter11 -match "ORIGINAL_FT11")
+    Record-Test "FT-11" $ft11Ok "Production migration failure in apply-madarcore-upgrade initiates automated rollback and restores original files." $true
+
+    # =========================================================================
+    # FT-12: Exact directory swap and stale file cleanup (RR5-02)
+    # =========================================================================
+    Write-Host "`n--- Testing FT-12: Exact directory swap cleans stale files ---" -ForegroundColor Cyan
     $labTargetFT12 = Join-Path $testSandboxRoot "LabFT12"
-    New-MockClientInstallation $labTargetFT12 "ORIGINAL_FT12" $false
-    $appBackupDir12 = Join-Path $labTargetFT12 "backups\mock_backup"
+    New-MockClientInstallation $labTargetFT12 "ORIGINAL_FT12" $true
+    Set-Content -LiteralPath (Join-Path $labTargetFT12 "dist\stale_legacy_code.js") -Value "// Stale legacy file"
+    $appBackupDir12 = Join-Path $labTargetFT12 "backups\mock_b12"
     New-Item -ItemType Directory -Path $appBackupDir12 -Force | Out-Null
-    Swap-DirectoryExact -SourceDir (Join-Path $packageDir "payload\dist") -TargetDir (Join-Path $labTargetFT12 "dist") -BackupDir (Join-Path $appBackupDir12 "dist_backup")
-    $swappedMain = Get-Content -LiteralPath (Join-Path $labTargetFT12 "dist\main.js") -Raw
-    $swappedOk = ($swappedMain -notmatch "ORIGINAL_FT12")
-    # Simulate rollback by swapping backup back
-    Swap-DirectoryExact -SourceDir (Join-Path $appBackupDir12 "dist_backup") -TargetDir (Join-Path $labTargetFT12 "dist") -BackupDir (Join-Path $appBackupDir12 "rollback_backup")
-    $rolledBackMain = Get-Content -LiteralPath (Join-Path $labTargetFT12 "dist\main.js") -Raw
-    $rollbackOk = ($rolledBackMain -match "ORIGINAL_FT12")
-    Record-Test "FT-11" $rollbackOk "Production migration failure initiates automated rollback and restores original files." $true
-    Record-Test "FT-12" $swappedOk "Exact directory swap replaces target directories without residual stale files." $true
+    Swap-DirectoryExact -SourceDir (Join-Path $packageDir "payload\dist") -TargetDir (Join-Path $labTargetFT12 "dist") -BackupDir (Join-Path $appBackupDir12 "dist_b12")
+    $hasStaleAfterSwap = Test-Path -LiteralPath (Join-Path $labTargetFT12 "dist\stale_legacy_code.js")
+    Swap-DirectoryExact -SourceDir (Join-Path $appBackupDir12 "dist_b12") -TargetDir (Join-Path $labTargetFT12 "dist") -BackupDir (Join-Path $appBackupDir12 "rb_b12")
+    $hasStaleAfterRollback = Test-Path -LiteralPath (Join-Path $labTargetFT12 "dist\stale_legacy_code.js")
+    $ft12Ok = (-not $hasStaleAfterSwap -and $hasStaleAfterRollback)
+    Record-Test "FT-12" $ft12Ok "Exact directory swap removes stale files and rollback restores complete previous tree." $true
 
     # =========================================================================
     # FT-13, FT-14, FT-15: Health check verification & branding (RR4-06)
@@ -350,16 +376,39 @@ public class Program {
     Record-Test "FT-17" ($ft17Res.ExitCode -ne 0) "Missing backup components during rollback transitions to error." $true
 
     # =========================================================================
-    # FT-18: Altered dump hash rejection in rollback (RR4-06)
+    # FT-18: Altered dump hash rejection in standalone rollback (RR5-02)
     # =========================================================================
-    Write-Host "`n--- Testing FT-18: Altered dump hash rejection ---" -ForegroundColor Cyan
-    $mockDump18 = Join-Path $testSandboxRoot "test_dump18.dump"
-    Set-Content -LiteralPath $mockDump18 -Value "DUMP_ORIGINAL" -Encoding UTF8
-    $origHash18 = (Get-FileHash $mockDump18 -Algorithm SHA256).Hash
-    Add-Content -LiteralPath $mockDump18 -Value "_TAMPERED"
-    $tamperedHash18 = (Get-FileHash $mockDump18 -Algorithm SHA256).Hash
-    $isHashMismatched = ($origHash18 -ne $tamperedHash18)
-    Record-Test "FT-18" $isHashMismatched "Dump hash mismatch detects tampering and halts restore." $true
+    Write-Host "`n--- Testing FT-18: Altered dump hash rejection in rollback ---" -ForegroundColor Cyan
+    $labTargetFT18 = Join-Path $testSandboxRoot "LabFT18"
+    New-MockClientInstallation $labTargetFT18 "FT18" $true
+    $backupDir18 = Join-Path $labTargetFT18 "backups\b18"
+    New-Item -ItemType Directory -Path $backupDir18 -Force | Out-Null
+    $appBackupDir18 = Join-Path $backupDir18 "app_backup"
+    New-Item -ItemType Directory -Path $appBackupDir18 -Force | Out-Null
+    $dumpFile18 = Join-Path $backupDir18 "pre_upgrade.dump"
+    Set-Content -LiteralPath $dumpFile18 -Value "MOCK_VALID_POSTGRES_DUMP_HEADER_1234567890" -Encoding UTF8
+    $originalDumpHash = Calculate-FileSHA256 $dumpFile18
+    Add-Content -LiteralPath $dumpFile18 -Value "_TAMPERED"
+
+    $reportObj18 = [ordered]@{
+        schemaVersion   = "1.0.0"
+        releaseId       = $releaseId
+        targetDirectory = $labTargetFT18
+        applicationPort = 3099
+        runMode         = [ordered]@{ Mode = "ManualProcess"; TargetDirectory = $labTargetFT18 }
+        database        = @{ host = "127.0.0.1"; port = 5432; database = "mock_client_db"; user = "mock_user" }
+        backupPaths     = @{
+            directory        = $backupDir18
+            databaseDump     = $dumpFile18
+            databaseDumpHash = $originalDumpHash
+            applicationBackup = $appBackupDir18
+        }
+    }
+    $reportFile18 = Join-Path $backupDir18 "upgrade-report.json"
+    Set-Content -LiteralPath $reportFile18 -Value ($reportObj18 | ConvertTo-Json -Depth 5) -Encoding UTF8
+    $ft18Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $rollbackScript, "-ReportPath", $reportFile18, "-Force")
+    $ft18Ok = ($ft18Res.ExitCode -ne 0 -and ($ft18Res.StdErr -match "Hash mismatch" -or $ft18Res.StdOut -match "Hash mismatch"))
+    Record-Test "FT-18" $ft18Ok "Rollback detects tampered dump SHA256 and refuses to restore." $true
 
     # =========================================================================
     # FT-19: Rollback parameter validation
@@ -376,15 +425,35 @@ public class Program {
     Record-Test "FT-20" (-not $staleCheck) "Exact atomic directory swap removes stale files from target." $false
 
     # =========================================================================
-    # FT-21: Full Idempotency path (RR4-04)
+    # FT-21: Full Idempotency path through apply engine (RR5-02, RR5-04)
     # =========================================================================
-    Write-Host "`n--- Testing FT-21: Full Idempotency path ---" -ForegroundColor Cyan
-    $candMainHash = (Get-FileHash (Join-Path $packageDir "payload\dist\main.js") -Algorithm SHA256).Hash
-    $candFrontHash = (Get-FileHash (Join-Path $packageDir "payload\frontend\dist\index.html") -Algorithm SHA256).Hash
-    $currMainHash = (Get-FileHash (Join-Path $labTargetFT16 "dist\main.js") -Algorithm SHA256).Hash
-    $currFrontHash = (Get-FileHash (Join-Path $packageDir "payload\frontend\dist\index.html") -Algorithm SHA256).Hash
-    $isIdentical = ($candMainHash -eq $currMainHash -and $candFrontHash -eq $currFrontHash)
-    Record-Test "FT-21" $isIdentical "Full comparison of payload assets accurately identifies matching installations." $true
+    Write-Host "`n--- Testing FT-21: Full Idempotency path through apply engine ---" -ForegroundColor Cyan
+    $labTargetFT21 = Join-Path $testSandboxRoot "LabFT21"
+    New-MockClientInstallation $labTargetFT21 "FT21" $true
+    Copy-DirectorySafely -SourceDir (Join-Path $packageDir "payload\dist") -DestinationDir (Join-Path $labTargetFT21 "dist")
+    Copy-DirectorySafely -SourceDir (Join-Path $packageDir "payload\frontend\dist") -DestinationDir (Join-Path $labTargetFT21 "frontend\dist")
+    Copy-Item (Join-Path $packageDir "payload\prisma\schema.prisma") (Join-Path $labTargetFT21 "prisma\schema.prisma") -Force
+    Copy-DirectorySafely -SourceDir (Join-Path $packageDir "payload\prisma\migrations") -DestinationDir (Join-Path $labTargetFT21 "prisma\migrations")
+    New-Item -ItemType Directory -Path (Join-Path $labTargetFT21 "node_modules\prisma\build") -Force | Out-Null
+    Copy-Item (Join-Path $packageDir "payload\prisma-runtime\node_modules\prisma\build\index.js") (Join-Path $labTargetFT21 "node_modules\prisma\build\index.js") -Force
+    # Clean stale file from New-MockClientInstallation
+    if (Test-Path -LiteralPath (Join-Path $labTargetFT21 "dist\stale_old_file.js")) {
+        Remove-Item -LiteralPath (Join-Path $labTargetFT21 "dist\stale_old_file.js") -Force
+    }
+
+    $candMigs = Compute-MigrationChecksums (Join-Path $packageDir "payload\prisma\migrations")
+    $allMigLines = ""
+    foreach ($km in $candMigs.Keys) {
+        $allMigLines += "$km|$($candMigs[$km])|2026-09-07 00:00:00|`n"
+    }
+    Set-Content -LiteralPath (Join-Path $labTargetFT21 "prerequisites\pgsql\bin\psql_migrations.out") -Value $allMigLines -Encoding UTF8
+
+    $ft21Res = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $applyScript, "-TargetDirectory", $labTargetFT21, "-NonInteractive") -EnvironmentVariables @{ "MADARCORE_LAB_AUTH_TOKEN" = $env:MADARCORE_LAB_AUTH_TOKEN; "MADARCORE_LAB_ROOT" = $env:MADARCORE_LAB_ROOT }
+
+    $ft21ReportFile = Join-Path $labTargetFT21 "backups\upgrade-report.json"
+    $ft21Report = if (Test-Path $ft21ReportFile) { Get-Content $ft21ReportFile | ConvertFrom-Json } else { $null }
+    $ft21Ok = ($ft21Res.ExitCode -eq 0 -and ($ft21Res.StdOut -match "ALREADY_UP_TO_DATE" -or ($ft21Report -and $ft21Report.result -eq "ALREADY_UP_TO_DATE")))
+    Record-Test "FT-21" $ft21Ok "Fully matching target enters ALREADY_UP_TO_DATE path without creating backup or temp DB." $true
 
     # =========================================================================
     # FT-22: NonInteractive safety guard

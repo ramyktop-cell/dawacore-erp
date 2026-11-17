@@ -342,7 +342,28 @@ async function run() {
     });
     assert(badSaleRes.status === 400 || badSaleRes.status === 404 || !badSaleRes.ok, 'HTTP-09', 'Sales: Sale without valid active shift strictly rejected');
 
-    // 9. Sales: Valid Sale Invoice with Active Shift
+    // 8B. Sales (Scenario A): Prevent Sale using shift of another branch (branchA2 shift used in branchA1 sale)
+    const crossBranchSaleRes = await fetch(`${baseUrl}/api/sales/invoices`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cashierTokenA}`
+      },
+      body: JSON.stringify({
+        branchId: branchA2.id,
+        shiftId: shiftId, // shift belongs to branchA1
+        userId: cashierUserA.id,
+        paymentMethod: PaymentMethod.CASH,
+        items: [{ medicineId: medicineA.id, batchId: batchA.id, quantity: 1, unitPrice: 25 }]
+      })
+    });
+    assert(crossBranchSaleRes.status === 400 || crossBranchSaleRes.status === 403 || crossBranchSaleRes.status === 404 || !crossBranchSaleRes.ok, 'HTTP-09B', 'Sales: Sale using shift of another branch strictly rejected');
+
+    // Verify no sales invoice or batch decrement from rejected cross-branch sale
+    const unmodBatchA = await prisma.batch.findUnique({ where: { id: batchA.id } });
+    assert(unmodBatchA && unmodBatchA.quantityInBase === 50, 'DB-09C', 'Database readback: Batch quantity unchanged after rejected cross-branch sale');
+
+    // 9. Sales: Valid Sale Invoice with Active Shift (Scenario C - Sales & COGS)
     const validSaleRes = await fetch(`${baseUrl}/api/sales/invoices`, {
       method: 'POST',
       headers: {
@@ -365,10 +386,15 @@ async function run() {
     const updatedBatch = await prisma.batch.findUnique({ where: { id: batchA.id } });
     assert(updatedBatch && updatedBatch.quantityInBase === 48, 'DB-11', 'Database readback: Batch stock decremented accurately from 50 to 48');
 
-    const dbInvoice = await prisma.salesInvoice.findUnique({ where: { id: saleInvoiceId } });
+    const dbInvoice = await prisma.salesInvoice.findUnique({
+      where: { id: saleInvoiceId },
+      include: { items: true }
+    });
     assert(dbInvoice && dbInvoice.shiftId === shiftId, 'DB-12', 'Database readback: Sales invoice linked to active shift in database');
+    assert(dbInvoice && dbInvoice.items.length === 1 && Number(dbInvoice.items[0].costPrice) === 10, 'DB-12B', 'Database readback: Sales invoice item recorded batch costPrice (10) accurately');
 
-    // 11. Expenses: Create expense under shift
+    // 11. Expenses (Scenario B): Create expense within cash balance, and reject when exceeding balance
+    // Shift opening cash was 250, cash sale added 50 (total expectedCash = 300)
     const expenseRes = await fetch(`${baseUrl}/api/expenses`, {
       method: 'POST',
       headers: {
@@ -389,7 +415,33 @@ async function run() {
     const expenseData = await expenseRes.json();
     assert(expenseRes.status === 201 && expenseData.id, 'HTTP-13', 'Expenses: Operational expense recorded via POST /api/expenses');
 
-    // 12. Purchasing: Direct receive purchase order
+    // Attempt expense greater than available cash (amount 99999 > remaining cash)
+    const excessiveExpenseRes = await fetch(`${baseUrl}/api/expenses`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminTokenA}`
+      },
+      body: JSON.stringify({
+        companyId: companyA.id,
+        branchId: branchA1.id,
+        shiftId: shiftId,
+        expenseType: 'MAINTENANCE',
+        accountId: expenseAccountA.id,
+        amount: 999999,
+        paidFrom: 'CASH',
+        paymentMethod: ExpensePaymentMethod.CASH
+      })
+    });
+    assert(excessiveExpenseRes.status === 400 || excessiveExpenseRes.status === 422 || !excessiveExpenseRes.ok, 'HTTP-13B', 'Expenses: Excessive expense exceeding available cash balance strictly rejected');
+
+    // Verify rejected expense left no trace in database
+    const rejectedExpenses = await prisma.expense.findMany({
+      where: { companyId: companyA.id, amount: 999999 }
+    });
+    assert(rejectedExpenses.length === 0, 'DB-13C', 'Database readback: No expense record created for rejected excessive expense');
+
+    // 12. Purchasing (Scenario D): Direct receive purchase order with additionalExpenses (Landed Cost)
     const purchaseRes = await fetch(`${baseUrl}/api/purchasing/receive`, {
       method: 'POST',
       headers: {
@@ -400,6 +452,8 @@ async function run() {
         companyId: companyA.id,
         branchId: branchA1.id,
         supplierId: supplierA.id,
+        additionalExpenses: 30, // 30 distributed over 15 units = +2 landed cost per unit
+        expenseAllocationMethod: 'LANDED_COST',
         items: [{
           medicineId: medicineA.id,
           batchNumber: `RECV-${stamp}`,
@@ -410,20 +464,43 @@ async function run() {
         }]
       })
     });
-    assert(purchaseRes.status === 201 || purchaseRes.status === 200, 'HTTP-14', 'Purchasing: Direct purchase receipt processed via POST /api/purchasing/receive');
+    const purchaseData = await purchaseRes.json();
+    assert(purchaseRes.status === 201 || purchaseRes.status === 200, 'HTTP-14', 'Purchasing: Direct purchase receipt with additional expenses processed');
 
-    // 13. Shifts: Close Shift via PATCH /api/shifts/:id/close
-    const closeShiftRes = await fetch(`${baseUrl}/api/shifts/${shiftId}/close`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${cashierTokenA}`
-      },
-      body: JSON.stringify({ actualCash: 270, notes: 'End of acceptance shift' })
+    // Verify Landed unit cost: base cost (8) + allocated expense (30 / 15 = 2) = 10
+    const receivedBatch = await prisma.batch.findFirst({
+      where: { batchNumber: `RECV-${stamp}`, branchId: branchA1.id }
     });
-    assert(closeShiftRes.status === 200 || closeShiftRes.status === 201, 'HTTP-15', 'Shifts: Closed shift successfully via PATCH /api/shifts/:id/close');
+    assert(receivedBatch && receivedBatch.quantityInBase === 15, 'DB-14B', 'Database readback: Received purchase quantity accurately added to batch');
+    assert(receivedBatch && Number(receivedBatch.costPrice) === 10, 'DB-14C', 'Database readback: Landed unit cost calculated accurately (8 base + 2 allocated expense = 10)');
 
-    // 14. Shifts: Prevent Double Close via PATCH /api/shifts/:id/close
+    // 13. Shifts (Scenario E): Concurrent Close with Promise.allSettled (Exactly 1 succeeds, 1 rejected)
+    const closePromises = [
+      fetch(`${baseUrl}/api/shifts/${shiftId}/close`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cashierTokenA}` },
+        body: JSON.stringify({ actualCash: 270, notes: 'Concurrent Close Attempt 1' })
+      }),
+      fetch(`${baseUrl}/api/shifts/${shiftId}/close`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cashierTokenA}` },
+        body: JSON.stringify({ actualCash: 270, notes: 'Concurrent Close Attempt 2' })
+      })
+    ];
+
+    const closeResults = await Promise.allSettled(closePromises);
+    const closeStatuses = [];
+    for (const cr of closeResults) {
+      if (cr.status === 'fulfilled') {
+        closeStatuses.push(cr.value.status);
+      }
+    }
+
+    const successCount = closeStatuses.filter(s => s === 200 || s === 201).length;
+    const failCount = closeStatuses.filter(s => s >= 400).length;
+    assert(successCount === 1 && failCount === 1, 'HTTP-15', 'Shifts: Concurrent close via Promise.allSettled resulted in exactly 1 SUCCESS and 1 REJECTED');
+
+    // 14. Shifts: Prevent Subsequent Double Close
     const doubleCloseRes = await fetch(`${baseUrl}/api/shifts/${shiftId}/close`, {
       method: 'PATCH',
       headers: {
@@ -432,11 +509,11 @@ async function run() {
       },
       body: JSON.stringify({ actualCash: 270 })
     });
-    assert(doubleCloseRes.status === 400 || doubleCloseRes.status === 409 || !doubleCloseRes.ok, 'HTTP-16', 'Shifts: Double close strictly rejected by application service');
+    assert(doubleCloseRes.status === 400 || doubleCloseRes.status === 409 || !doubleCloseRes.ok, 'HTTP-16', 'Shifts: Subsequent close strictly rejected on already closed shift');
 
     // 15. DB Readback: Final Shift State Verification
     const closedDbShift = await prisma.shift.findUnique({ where: { id: shiftId } });
-    assert(closedDbShift && closedDbShift.status === 'CLOSED' && closedDbShift.endTime !== null, 'DB-17', 'Database readback: Shift recorded as closed in database');
+    assert(closedDbShift && closedDbShift.status === 'CLOSED' && closedDbShift.endTime !== null, 'DB-17', 'Database readback: Shift recorded as CLOSED with timestamp in database');
 
     console.log(`\n🎉 All ${results.length} HTTP acceptance scenarios passed via real candidate backend!`);
     return { ok: true, scenariosCount: results.length, database: dbName, port: ephemeralPort };

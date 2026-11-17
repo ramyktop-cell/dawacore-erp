@@ -33,7 +33,7 @@ function Sanitize-LogText([string]$text) {
 }
 
 function Calculate-FileSHA256([string]$filePath) {
-    if (-not (Test-Path -LiteralPath $filePath)) { return $null }
+    if ([string]::IsNullOrWhiteSpace($filePath) -or -not (Test-Path -LiteralPath $filePath)) { return $null }
     $hasher = [System.Security.Cryptography.SHA256]::Create()
     $stream = [System.IO.File]::OpenRead($filePath)
     try {
@@ -340,29 +340,41 @@ function Detect-ApplicationRunMode {
         [Parameter(Mandatory = $true)][int]$Port
     )
 
-    # 1. Check Windows Services
-    $services = Get-CimInstance Win32_Service -Filter "State = 'Running'" -ErrorAction SilentlyContinue
+    $resolvedTarget = (Resolve-Path -LiteralPath $TargetDir -ErrorAction SilentlyContinue)
+    $cleanTargetDir = if ($resolvedTarget) { $resolvedTarget.Path } else { $TargetDir }
+
+    # 1. Check Windows Services (Running or starting)
+    $services = Get-CimInstance Win32_Service -ErrorAction SilentlyContinue
     foreach ($svc in $services) {
-        if ($svc.PathName -and $svc.PathName.IndexOf($TargetDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        if ($svc.PathName -and $svc.PathName.IndexOf($cleanTargetDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
             return [PSCustomObject]@{
-                Mode = "WindowsService"
-                Name = $svc.Name
-                Id   = $svc.ProcessId
+                Mode            = "WindowsService"
+                Name            = $svc.Name
+                Executable      = $svc.PathName
+                Arguments       = ""
+                TargetDirectory = $cleanTargetDir
+                ProcessIdentity = $svc.StartName
+                Id              = $svc.ProcessId
             }
         }
     }
 
-    # 2. Check Scheduled Tasks
+    # 2. Check Scheduled Tasks by inspecting Actions (Execute / Arguments)
     try {
-        $tasks = Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Running' }
+        $tasks = Get-ScheduledTask -ErrorAction SilentlyContinue
         foreach ($task in $tasks) {
             foreach ($action in $task.Actions) {
                 $actStr = "$($action.Execute) $($action.Arguments)"
-                if ($actStr -and $actStr.IndexOf($TargetDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                if ($actStr -and $actStr.IndexOf($cleanTargetDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                    $taskPrincipal = if ($task.Principal) { $task.Principal.UserId } else { "" }
                     return [PSCustomObject]@{
-                        Mode = "ScheduledTask"
-                        Name = $task.TaskName
-                        Id   = 0
+                        Mode            = "ScheduledTask"
+                        Name            = $task.TaskName
+                        Executable      = "$($action.Execute)"
+                        Arguments       = "$($action.Arguments)"
+                        TargetDirectory = $cleanTargetDir
+                        ProcessIdentity = "$taskPrincipal"
+                        Id              = 0
                     }
                 }
             }
@@ -374,28 +386,50 @@ function Detect-ApplicationRunMode {
     if ($conn) {
         $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue
         if ($proc) {
-            $cmdLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.Id)").CommandLine
-            if (($proc.Path -and $proc.Path.StartsWith($TargetDir, [System.StringComparison]::OrdinalIgnoreCase)) -or
-                ($cmdLine -and $cmdLine.IndexOf($TargetDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)) {
+            $cimProc = Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.Id)" -ErrorAction SilentlyContinue
+            $cmdLine = if ($cimProc) { $cimProc.CommandLine } else { "" }
+            $procPath = if ($cimProc -and $cimProc.ExecutablePath) { $cimProc.ExecutablePath } else { $proc.Path }
+
+            $isTarget = $false
+            if ($procPath -and $procPath.IndexOf($cleanTargetDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                $isTarget = $true
+            }
+            if ($cmdLine -and $cmdLine.IndexOf($cleanTargetDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                $isTarget = $true
+            }
+
+            if ($isTarget) {
                 return [PSCustomObject]@{
-                    Mode = "ManualProcess"
-                    Name = $proc.ProcessName
-                    Id   = $proc.Id
+                    Mode            = "ManualProcess"
+                    Name            = $proc.ProcessName
+                    Executable      = "$procPath"
+                    Arguments       = "$cmdLine"
+                    TargetDirectory = $cleanTargetDir
+                    ProcessIdentity = "$($proc.StartInfo.UserName)"
+                    Id              = $proc.Id
                 }
             } else {
                 return [PSCustomObject]@{
-                    Mode = "ForeignProcess"
-                    Name = $proc.ProcessName
-                    Id   = $proc.Id
+                    Mode            = "ForeignProcess"
+                    Name            = $proc.ProcessName
+                    Executable      = "$procPath"
+                    Arguments       = "$cmdLine"
+                    TargetDirectory = ""
+                    ProcessIdentity = ""
+                    Id              = $proc.Id
                 }
             }
         }
     }
 
     return [PSCustomObject]@{
-        Mode = "None"
-        Name = ""
-        Id   = 0
+        Mode            = "None"
+        Name            = ""
+        Executable      = ""
+        Arguments       = ""
+        TargetDirectory = $cleanTargetDir
+        ProcessIdentity = ""
+        Id              = 0
     }
 }
 
@@ -411,13 +445,19 @@ function Stop-ApplicationRunMode {
     }
 
     if ($RunModeInfo.Mode -eq "WindowsService") {
+        if ([string]::IsNullOrWhiteSpace($RunModeInfo.Name)) {
+            throw "Cannot stop Windows Service: Service name is null or empty."
+        }
         Write-InfoLog "Stopping Windows Service: $($RunModeInfo.Name)..."
-        Stop-Service -Name $RunModeInfo.Name -Force
+        Stop-Service -Name $RunModeInfo.Name -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 2
         return $true
     }
 
     if ($RunModeInfo.Mode -eq "ScheduledTask") {
+        if ([string]::IsNullOrWhiteSpace($RunModeInfo.Name)) {
+            throw "Cannot stop Scheduled Task: Task name is null or empty."
+        }
         Write-InfoLog "Stopping Scheduled Task: $($RunModeInfo.Name)..."
         Stop-ScheduledTask -TaskName $RunModeInfo.Name -ErrorAction SilentlyContinue
         $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -430,7 +470,9 @@ function Stop-ApplicationRunMode {
 
     if ($RunModeInfo.Mode -eq "ManualProcess") {
         Write-InfoLog "Stopping target application process PID $($RunModeInfo.Id)..."
-        Stop-Process -Id $RunModeInfo.Id -Force
+        if ($RunModeInfo.Id -gt 0) {
+            Stop-Process -Id $RunModeInfo.Id -Force -ErrorAction SilentlyContinue
+        }
         Start-Sleep -Seconds 2
         return $true
     }
@@ -446,12 +488,18 @@ function Start-ApplicationRunMode {
     )
 
     if ($RunModeInfo.Mode -eq "WindowsService") {
+        if ([string]::IsNullOrWhiteSpace($RunModeInfo.Name)) {
+            throw "Cannot start Windows Service: Service name is null or empty."
+        }
         Write-InfoLog "Starting Windows Service: $($RunModeInfo.Name)..."
         Start-Service -Name $RunModeInfo.Name
         return $true
     }
 
     if ($RunModeInfo.Mode -eq "ScheduledTask") {
+        if ([string]::IsNullOrWhiteSpace($RunModeInfo.Name)) {
+            throw "Cannot start Scheduled Task: Task name is null or empty."
+        }
         Write-InfoLog "Starting Scheduled Task: $($RunModeInfo.Name)..."
         Start-ScheduledTask -TaskName $RunModeInfo.Name
         return $true
@@ -502,6 +550,7 @@ function Audit-TargetMigrations {
     $candidateChecksums = Compute-MigrationChecksums -migrationsDir $CandidateMigrationsDir
 
     $applied = [ordered]@{}
+    $seenMigrations = @{}
     $lines = $res.StdOut -split "`r?`n"
     foreach ($line in $lines) {
         $parts = $line -split '\|'
@@ -512,6 +561,11 @@ function Audit-TargetMigrations {
             $rollAt = $parts[3].Trim()
 
             if (-not [string]::IsNullOrWhiteSpace($mName) -and $mName -ne "migration_name" -and $mName -notmatch '^[\s-]+$') {
+                if ($seenMigrations.ContainsKey($mName)) {
+                    throw "PREFLIGHT_FAILED: Duplicate migration recorded in target database: $mName"
+                }
+                $seenMigrations[$mName] = $true
+
                 if ([string]::IsNullOrWhiteSpace($finAt) -or (-not [string]::IsNullOrWhiteSpace($rollAt))) {
                     throw "PREFLIGHT_FAILED: Target database contains failed or rolled-back migration: $mName"
                 }
@@ -520,16 +574,132 @@ function Audit-TargetMigrations {
                     throw "PREFLIGHT_FAILED: Unknown migration found in target database: $mName"
                 }
 
+                if ([string]::IsNullOrWhiteSpace($mCheck)) {
+                    throw "PREFLIGHT_FAILED: Empty checksum for migration in target database: $mName"
+                }
+
+                $expectedChecksum = $candidateChecksums[$mName]
+                if ($mCheck.ToLowerInvariant() -ne $expectedChecksum.ToLowerInvariant()) {
+                    throw "PREFLIGHT_FAILED: Checksum mismatch for migration '$mName'. Recorded: '$mCheck', Expected: '$expectedChecksum'."
+                }
+
                 $applied[$mName] = $mCheck
             }
         }
     }
 
+    $pending = $candidateChecksums.Keys.Count - $applied.Keys.Count
+    if ($pending -lt 0) {
+        throw "PREFLIGHT_FAILED: Inconsistent migration state: PendingCount is negative ($pending)."
+    }
+
     return [PSCustomObject]@{
         AppliedCount   = $applied.Keys.Count
         CandidateCount = $candidateChecksums.Keys.Count
-        PendingCount   = ($candidateChecksums.Keys.Count - $applied.Keys.Count)
+        PendingCount   = $pending
         Applied        = $applied
+    }
+}
+
+function Compare-DeployedPayloadExact {
+    param(
+        [Parameter(Mandatory = $true)][string]$PayloadDir,
+        [Parameter(Mandatory = $true)][string]$TargetDir
+    )
+
+    $differences = [System.Collections.Generic.List[string]]::new()
+
+    # Define explicit deployment mappings: source subpath -> target subpath
+    # 1. dist -> dist (Whole directory sync)
+    # 2. frontend/dist -> frontend/dist (Whole directory sync)
+    # 3. prisma/schema.prisma -> prisma/schema.prisma (File)
+    # 4. prisma/migrations -> prisma/migrations (Whole directory sync)
+    # 5. prisma-runtime -> node_modules/.prisma & node_modules/@prisma (or payload location)
+
+    $directoryMappings = @(
+        @{ Source = (Join-Path $PayloadDir "dist"); Target = (Join-Path $TargetDir "dist"); Name = "dist" },
+        @{ Source = (Join-Path $PayloadDir "frontend\dist"); Target = (Join-Path $TargetDir "frontend\dist"); Name = "frontend/dist" },
+        @{ Source = (Join-Path $PayloadDir "prisma\migrations"); Target = (Join-Path $TargetDir "prisma\migrations"); Name = "prisma/migrations" }
+    )
+
+    foreach ($map in $directoryMappings) {
+        $sDir = $map.Source
+        $tDir = $map.Target
+        if (-not (Test-Path -LiteralPath $sDir)) { continue }
+        if (-not (Test-Path -LiteralPath $tDir)) {
+            $differences.Add("Target directory missing: $($map.Name)")
+            continue
+        }
+
+        # Check all source files exist in target with identical SHA256
+        $sFiles = Get-ChildItem -LiteralPath $sDir -Recurse -File
+        $sRelativeMap = @{}
+        foreach ($sf in $sFiles) {
+            $rel = $sf.FullName.Substring($sDir.Length).TrimStart('\', '/')
+            $sRelativeMap[$rel] = $sf.FullName
+            $tfPath = Join-Path $tDir $rel
+            if (-not (Test-Path -LiteralPath $tfPath)) {
+                $differences.Add("Missing target file in $($map.Name): $rel")
+            } else {
+                $sHash = Calculate-FileSHA256 $sf.FullName
+                $tHash = Calculate-FileSHA256 $tfPath
+                if ($sHash -ne $tHash) {
+                    $differences.Add("Hash mismatch in $($map.Name): $rel (Source=$sHash, Target=$tHash)")
+                }
+            }
+        }
+
+        # Check for stale files in target that do not exist in source
+        $tFiles = Get-ChildItem -LiteralPath $tDir -Recurse -File
+        foreach ($tf in $tFiles) {
+            $rel = $tf.FullName.Substring($tDir.Length).TrimStart('\', '/')
+            if (-not $sRelativeMap.ContainsKey($rel)) {
+                $differences.Add("Stale file detected in target $($map.Name): $rel")
+            }
+        }
+    }
+
+    # Check schema.prisma
+    $sSchema = Join-Path $PayloadDir "prisma\schema.prisma"
+    $tSchema = Join-Path $TargetDir "prisma\schema.prisma"
+    if (Test-Path -LiteralPath $sSchema) {
+        if (-not (Test-Path -LiteralPath $tSchema)) {
+            $differences.Add("Missing target prisma/schema.prisma")
+        } else {
+            $sHash = Calculate-FileSHA256 $sSchema
+            $tHash = Calculate-FileSHA256 $tSchema
+            if ($sHash -ne $tHash) {
+                $differences.Add("Hash mismatch for prisma/schema.prisma")
+            }
+        }
+    }
+
+    # Check candidate Prisma runtime CLI
+    $sRuntimeCli = Join-Path $PayloadDir "prisma-runtime\node_modules\prisma\build\index.js"
+    if (Test-Path -LiteralPath $sRuntimeCli) {
+        $sRuntimeHash = Calculate-FileSHA256 $sRuntimeCli
+        # Check if runtime deployed in target node_modules or runtime path
+        $tRuntimes = @(
+            (Join-Path $TargetDir "node_modules\prisma\build\index.js"),
+            (Join-Path $TargetDir "prisma-runtime\node_modules\prisma\build\index.js")
+        )
+        $matchedRuntime = $false
+        foreach ($tr in $tRuntimes) {
+            if (Test-Path -LiteralPath $tr) {
+                if ((Calculate-FileSHA256 $tr) -eq $sRuntimeHash) {
+                    $matchedRuntime = $true
+                    break
+                }
+            }
+        }
+        if (-not $matchedRuntime) {
+            $differences.Add("Candidate Prisma runtime CLI not deployed or modified in target.")
+        }
+    }
+
+    return [PSCustomObject]@{
+        IsIdentical = ($differences.Count -eq 0)
+        Differences = $differences
     }
 }
 

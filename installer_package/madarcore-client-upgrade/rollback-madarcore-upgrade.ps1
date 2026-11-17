@@ -70,6 +70,16 @@ if (-not $backupDir -or -not (Test-Path -LiteralPath $backupDir) -or -not $backu
 Write-InfoLog "المسار المستهدف للاستعادة: $resolvedTarget"
 Write-InfoLog "قاعدة البيانات المسجلة: $($report.database.database)"
 
+# 4.5 التحقق الصارم من سلامة نسخة قاعدة البيانات قبل إجراء أي تعديل (RR3-10, RR5-02)
+$dbDumpFile = $report.backupPaths.databaseDump
+if ($dbDumpFile -and (Test-Path -LiteralPath $dbDumpFile)) {
+    $actualDumpHash = Calculate-FileSHA256 $dbDumpFile
+    if ($report.backupPaths.databaseDumpHash -and $actualDumpHash -ne $report.backupPaths.databaseDumpHash) {
+        Write-FailureLog "CRITICAL: Database dump hash mismatch! Expected: $($report.backupPaths.databaseDumpHash), Actual: $actualDumpHash"
+        exit 1
+    }
+}
+
 # 4. التأكيد الصارم
 if (-not $Force) {
     Write-Host ""
@@ -128,9 +138,17 @@ if ($appBackupDir -and (Test-Path -LiteralPath $appBackupDir)) {
     exit 1
 }
 
-# 7. استعادة قاعدة البيانات مع التحقق الصارم من Dump SHA256 (RR3-10)
+# 7. استعادة قاعدة البيانات مع التحقق الصارم من Dump SHA256 (RR3-10, RR5-02)
 $dbDumpFile = $report.backupPaths.databaseDump
 $postgresTools = Discover-PostgresTools -targetDir $resolvedTarget
+
+if ($dbDumpFile -and (Test-Path -LiteralPath $dbDumpFile)) {
+    $actualDumpHash = Calculate-FileSHA256 $dbDumpFile
+    if ($report.backupPaths.databaseDumpHash -and $actualDumpHash -ne $report.backupPaths.databaseDumpHash) {
+        Write-FailureLog "CRITICAL: Database dump hash mismatch! Expected: $($report.backupPaths.databaseDumpHash), Actual: $actualDumpHash"
+        exit 1
+    }
+}
 
 if ($report.phases.deployment -eq "SUCCESS" -or $report.stateMachine -eq "PRODUCTION_MIGRATED") {
     # If production DB was touched, DB restore is strictly mandatory!
@@ -229,20 +247,36 @@ if ($report.phases.deployment -eq "SUCCESS" -or $report.stateMachine -eq "PRODUC
     Write-SuccessLog "تمت استعادة قاعدة البيانات ومطابقة عدد الجداول بنجاح."
 }
 
-# 8. استعادة نمط التشغيل والتحقق من صحة التطبيق السابق (RR4-05, RR4-06)
+# 8. استعادة نمط التشغيل والتحقق من صحة التطبيق السابق (RR4-05, RR4-06, RR5-05)
 $nodeExe = Discover-Node -targetDir $resolvedTarget
-$runModeRecorded = if ($report.runMode) { $report.runMode } else { "ManualProcess" }
-$runModeObj = [PSCustomObject]@{
-    Mode = $runModeRecorded
-    Name = ""
-    Id   = 0
+$runModeRecorded = $report.runMode
+
+$runModeObj = if ($runModeRecorded -is [PSCustomObject]) {
+    $runModeRecorded
+} elseif ($runModeRecorded -is [hashtable]) {
+    [PSCustomObject]$runModeRecorded
+} else {
+    [PSCustomObject]@{
+        Mode            = "$runModeRecorded"
+        Name            = ""
+        Executable      = ""
+        Arguments       = ""
+        TargetDirectory = $resolvedTarget
+        ProcessIdentity = ""
+        Id              = 0
+    }
 }
 
-Write-InfoLog "جاري إعادة تشغيل التطبيق بالنمط المسجل: $runModeRecorded..."
+if (($runModeObj.Mode -eq "WindowsService" -or $runModeObj.Mode -eq "ScheduledTask") -and [string]::IsNullOrWhiteSpace($runModeObj.Name)) {
+    Write-FailureLog "CRITICAL: Cannot restore $($runModeObj.Mode): Service/Task name is null or empty in report. State is MANUAL_RECOVERY_REQUIRED."
+    exit 1
+}
+
+Write-InfoLog "جاري إعادة تشغيل التطبيق بالنمط المسجل: $($runModeObj.Mode) (Name: '$($runModeObj.Name)')..."
 Start-ApplicationRunMode -RunModeInfo $runModeObj -TargetDir $resolvedTarget -NodeExe $nodeExe | Out-Null
 Start-Sleep -Seconds 3
 
-# Verify previous health
+# Verify previous health strictly via JSON contract (RR5-05)
 $healthVerified = $false
 $healthUrl = "http://127.0.0.1:$appPort/api/health"
 for ($i = 0; $i -lt 15; $i++) {
@@ -250,7 +284,7 @@ for ($i = 0; $i -lt 15; $i++) {
         $resp = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
         if ($resp.StatusCode -eq 200) {
             $hObj = $resp.Content | ConvertFrom-Json
-            if ($hObj -and ($hObj.status -eq 'ok' -or $resp.Content -match 'MadarCore')) {
+            if ($hObj -and $hObj.status -eq 'ok' -and $hObj.service -eq 'MadarCore ERP') {
                 $healthVerified = $true
                 break
             }

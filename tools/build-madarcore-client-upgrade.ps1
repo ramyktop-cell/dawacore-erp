@@ -31,7 +31,7 @@ if (-not $stagingDir.StartsWith($canonicalOutput, [System.StringComparison]::Ord
     throw "SAFETY VIOLATION: Staging path $stagingDir is not contained within $canonicalOutput"
 }
 
-# 1. Build Gate: Prisma Generate, Backend Build & Frontend Build
+# 1. Build Gate: Prisma Generate, Backend Build & Frontend Build (RR5-06)
 Write-Host "[BUILD-GATE] 1/3 Running Prisma client generation..." -ForegroundColor Cyan
 & npx prisma generate
 if ($LASTEXITCODE -ne 0) { throw "Build Gate Failure: npx prisma generate failed." }

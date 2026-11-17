@@ -128,6 +128,7 @@ try {
 
     # 1.4 Validate Target Core Files
     $envFile = Join-Path $targetDir ".env"
+    $licenseFile = Join-Path $targetDir "license.key"
     $distMain = Join-Path $targetDir "dist\main.js"
     $frontIndex = Join-Path $targetDir "frontend\dist\index.html"
     $prismaSchema = Join-Path $targetDir "prisma\schema.prisma"
@@ -217,13 +218,21 @@ try {
         throw "PREFLIGHT_FAILED: Candidate Prisma runtime CLI missing: $candidatePrismaCli"
     }
 
-    # 1.9 Detect Run Mode (RR4-05)
+    # 1.9 Detect Run Mode (RR4-05, RR5-05)
     $runModeInfo = Detect-ApplicationRunMode -TargetDir $targetDir -Port $appPort
     if ($runModeInfo.Mode -eq "ForeignProcess") {
         throw "PREFLIGHT_FAILED: Port $appPort is occupied by foreign process $($runModeInfo.Name) (PID $($runModeInfo.Id))."
     }
-    $reportData.runMode = $runModeInfo.Mode
-    Write-InfoLog "Detected target application run mode: $($runModeInfo.Mode)"
+    $reportData.runMode = [ordered]@{
+        mode            = $runModeInfo.Mode
+        name            = $runModeInfo.Name
+        executable      = $runModeInfo.Executable
+        arguments       = $runModeInfo.Arguments
+        targetDirectory = $runModeInfo.TargetDirectory
+        processIdentity = $runModeInfo.ProcessIdentity
+        id              = $runModeInfo.Id
+    }
+    Write-InfoLog "Detected target application run mode: $($runModeInfo.Mode) (Name: '$($runModeInfo.Name)')"
 
     # 1.10 Database Connection & Migration Audit Check (RR4-03)
     $dbPing = Execute-SqlQuery -PsqlExe $pgTools.psql -DbConn $dbConn -Query "SELECT 1;"
@@ -241,37 +250,34 @@ try {
     }
     Write-InfoLog "Migration audit passed: $($migAudit.AppliedCount) applied, $($migAudit.PendingCount) pending."
 
-    # 1.11 Full Idempotency Check across all payload assets, migrations, health & branding (RR4-04)
+    # 1.11 Full Idempotency Check across all payload assets, migrations, health & branding (RR4-04, RR5-04)
     $isAlreadyUpToDate = $false
-    if ($migAudit.PendingCount -eq 0 -and $runModeInfo.Mode -ne "None") {
-        $filesMismatch = $false
-        Get-ChildItem -LiteralPath (Join-Path $payloadDir "dist") -Recurse -File | ForEach-Object {
-            $rel = $_.FullName.Substring((Join-Path $payloadDir "dist").Length).TrimStart('\', '/')
-            $tgt = Join-Path $targetDir "dist\$rel"
-            if (-not (Test-Path -LiteralPath $tgt) -or (Calculate-FileSHA256 $_.FullName) -ne (Calculate-FileSHA256 $tgt)) {
-                $filesMismatch = $true
-            }
-        }
-        Get-ChildItem -LiteralPath (Join-Path $payloadDir "frontend\dist") -Recurse -File | ForEach-Object {
-            $rel = $_.FullName.Substring((Join-Path $payloadDir "frontend\dist").Length).TrimStart('\', '/')
-            $tgt = Join-Path $targetDir "frontend\dist\$rel"
-            if (-not (Test-Path -LiteralPath $tgt) -or (Calculate-FileSHA256 $_.FullName) -ne (Calculate-FileSHA256 $tgt)) {
-                $filesMismatch = $true
-            }
-        }
+    if ($migAudit.PendingCount -eq 0 -and $runModeInfo.Mode -ne "ForeignProcess") {
+        $exactPayloadCheck = Compare-DeployedPayloadExact -PayloadDir $payloadDir -TargetDir $targetDir
 
-        if (-not $filesMismatch) {
-            try {
-                $hResp = Invoke-WebRequest -Uri "http://127.0.0.1:$appPort/api/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
-                $bResp = Invoke-WebRequest -Uri "http://127.0.0.1:$appPort/api/branding" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
-                if ($hResp.StatusCode -eq 200 -and $bResp.StatusCode -eq 200) {
-                    $hObj = $hResp.Content | ConvertFrom-Json
-                    $bObj = $bResp.Content | ConvertFrom-Json
-                    if ($hObj.status -eq 'ok' -and $hObj.service -eq 'MadarCore ERP' -and $bObj.platformName -eq 'MadarCore') {
-                        $isAlreadyUpToDate = $true
+        # Check preserved files
+        $envBefore = Calculate-FileSHA256 $envFile
+        $licBefore = Calculate-FileSHA256 $licenseFile
+
+        if ($exactPayloadCheck.IsIdentical) {
+            # If application is running on port, verify health and branding
+            $portConn = Get-NetTCPConnection -LocalPort $appPort -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($portConn) {
+                try {
+                    $hResp = Invoke-WebRequest -Uri "http://127.0.0.1:$appPort/api/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
+                    $bResp = Invoke-WebRequest -Uri "http://127.0.0.1:$appPort/api/branding" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
+                    if ($hResp.StatusCode -eq 200 -and $bResp.StatusCode -eq 200) {
+                        $hObj = $hResp.Content | ConvertFrom-Json
+                        $bObj = $bResp.Content | ConvertFrom-Json
+                        if ($hObj.status -eq 'ok' -and $hObj.service -eq 'MadarCore ERP' -and $bObj.platformName -eq 'MadarCore') {
+                            $isAlreadyUpToDate = $true
+                        }
                     }
-                }
-            } catch {}
+                } catch {}
+            } else {
+                # Target files, migrations, and schema are completely up-to-date and offline
+                $isAlreadyUpToDate = $true
+            }
         }
     }
 
@@ -538,11 +544,18 @@ try {
         Swap-DirectoryExact -SourceDir (Join-Path $payloadDir "prisma\migrations") -TargetDir (Join-Path $targetDir "prisma\migrations") -BackupDir (Join-Path $appBackupDir "prisma_migrations_backup")
     }
 
+    # Deploy candidate Prisma runtime to target node_modules
+    $targetNodeModules = Join-Path $targetDir "node_modules"
+    if (Test-Path -LiteralPath (Join-Path $payloadDir "prisma-runtime\node_modules")) {
+        Write-InfoLog "Deploying candidate Prisma runtime closure to target node_modules..."
+        Copy-DirectorySafely -SourceDir (Join-Path $payloadDir "prisma-runtime\node_modules") -DestinationDir $targetNodeModules
+    }
+
     $reportData.stateMachine = "FILES_SWAPPED"
     $reportData.phases.deployment = "SUCCESS"
 
     # --------------------------------------------------------------------------------
-    # Phase 6: Post-Deployment Verification (Health Check & Branding) (RR4-05, RR4-06)
+    # Phase 6: Post-Deployment Verification (Health Check, Branding, and Payload) (RR4-05, RR5-04)
     # --------------------------------------------------------------------------------
     $reportData.phases.health = "IN_PROGRESS"
     Write-InfoLog "Restarting target application using run mode $($runModeInfo.Mode)..."
@@ -550,6 +563,12 @@ try {
     Start-ApplicationRunMode -RunModeInfo $runModeInfo -TargetDir $targetDir -NodeExe $nodeExe | Out-Null
     Start-Sleep -Seconds 3
     $reportData.stateMachine = "APPLICATION_RESTARTED"
+
+    # Verify listening process owner and target path
+    $postDeployRunMode = Detect-ApplicationRunMode -TargetDir $targetDir -Port $appPort
+    if ($postDeployRunMode.Mode -eq "ForeignProcess") {
+        throw "Post-deploy verification failed: Port $appPort is occupied by foreign process $($postDeployRunMode.Name)."
+    }
 
     # Verify Health & Branding endpoints strictly
     $healthOk = $false
@@ -587,6 +606,12 @@ try {
 
     if (-not $brandingOk) {
         throw "Branding verification failed: Service did not respond with MadarCore branding on port $appPort"
+    }
+
+    # Verify Deployed Payload Exact Match
+    $postPayloadAudit = Compare-DeployedPayloadExact -PayloadDir $payloadDir -TargetDir $targetDir
+    if (-not $postPayloadAudit.IsIdentical) {
+        throw "Post-deploy payload verification failed: $($postPayloadAudit.Differences -join '; ')"
     }
 
     # Verify Preserved Files (.env and license.key)
