@@ -20,6 +20,9 @@ async function sleep(ms) {
 }
 
 async function run() {
+  let serverProc = null;
+  let prisma = null;
+
   const dbUrl = process.env.ACCEPTANCE_DATABASE_URL || process.env.DATABASE_URL;
   if (!dbUrl) {
     throw new Error('DATABASE_URL is not set for acceptance test');
@@ -39,37 +42,65 @@ async function run() {
 
   process.env.DATABASE_URL = dbUrl;
   const targetDir = process.env.TARGET_DIRECTORY || process.cwd();
-  const candidateDist = process.env.CANDIDATE_DIST_DIR || path.join(targetDir, 'dist');
+  const candidateRuntimeDir = process.env.CANDIDATE_RUNTIME_DIR || path.resolve(__dirname, '..', 'server-runtime');
+  const candidateDist = process.env.CANDIDATE_DIST_DIR || path.join(candidateRuntimeDir, 'dist');
   const candidateMain = path.join(candidateDist, 'main.js');
 
   if (!fs.existsSync(candidateMain)) {
     throw new Error(`Candidate backend main.js not found at: ${candidateMain}`);
   }
 
-  // Load Prisma Client from candidate runtime, target node_modules, or project root node_modules
-  let prismaClientModule = path.join(targetDir, 'node_modules', '@prisma', 'client');
-  if (!fs.existsSync(prismaClientModule)) {
-    const candidateRuntime = path.join(path.dirname(__dirname), 'node_modules', '@prisma', 'client');
-    if (fs.existsSync(candidateRuntime)) {
-      prismaClientModule = candidateRuntime;
-    } else {
-      const rootPrisma = path.resolve(__dirname, '..', 'node_modules', '@prisma', 'client');
-      if (fs.existsSync(rootPrisma)) {
-        prismaClientModule = rootPrisma;
-      } else {
-        throw new Error(`@prisma/client not found in target or candidate runtime: ${prismaClientModule}`);
-      }
+  const runtimePkgJson = path.join(candidateRuntimeDir, 'package.json');
+  if (!fs.existsSync(runtimePkgJson)) {
+    throw new Error(`Candidate server runtime package.json not found at: ${runtimePkgJson}`);
+  }
+
+  const runtimeNodeModules = path.join(candidateRuntimeDir, 'node_modules');
+  if (!fs.existsSync(runtimeNodeModules)) {
+    throw new Error(`Candidate server runtime node_modules not found at: ${runtimeNodeModules}`);
+  }
+
+  // Anchor require strictly at payload/server-runtime/package.json (Section 3.4)
+  const { createRequire } = require('module');
+  const candidateRequire = createRequire(runtimePkgJson);
+
+  // Bounds & resolution check for direct production dependencies and critical modules
+  const criticalModules = [
+    '@nestjs/core',
+    '@nestjs/common',
+    '@nestjs/swagger',
+    '@prisma/client',
+    'bcryptjs',
+    'pdfmake-rtl',
+    'puppeteer'
+  ];
+  const pkgData = JSON.parse(fs.readFileSync(runtimePkgJson, 'utf8'));
+  const directDeps = Object.keys(pkgData.dependencies || {});
+  const modulesToCheck = Array.from(new Set([...directDeps, ...criticalModules]));
+
+  const canonicalRuntimeNodeModules = fs.realpathSync(runtimeNodeModules).toLowerCase();
+
+  for (const mod of modulesToCheck) {
+    let resolved;
+    try {
+      resolved = candidateRequire.resolve(mod);
+    } catch (err) {
+      throw new Error(`Module resolution failed for candidate dependency '${mod}': ${err.message}`);
+    }
+    const canonicalResolved = fs.realpathSync(resolved).toLowerCase();
+    if (!canonicalResolved.startsWith(canonicalRuntimeNodeModules)) {
+      throw new Error(`Module resolution boundary breach: '${mod}' resolved outside candidate runtime to '${resolved}'`);
     }
   }
 
-  const { PrismaClient, AccountType, Role, PaymentMethod, ExpensePaymentMethod } = require(prismaClientModule);
-  const prisma = new PrismaClient({ datasources: { db: { url: dbUrl } } });
+  const { PrismaClient, AccountType, Role, PaymentMethod, ExpensePaymentMethod } = candidateRequire('@prisma/client');
+  prisma = new PrismaClient({ datasources: { db: { url: dbUrl } } });
   await prisma.$connect();
   console.log(`[ACCEPTANCE] Connected to safe temporary database: ${dbName}`);
 
   // Fixture Seeding via Prisma (Allowed solely for fixtures & readback)
   const stamp = Date.now();
-  const bcrypt = require('bcryptjs');
+  const bcrypt = candidateRequire('bcryptjs');
   const passwordRaw = 'AcceptancePass123!';
   const passwordHash = await bcrypt.hash(passwordRaw, 10);
 
@@ -234,12 +265,14 @@ async function run() {
     NODE_ENV: 'production',
     JWT_SECRET: 'ACCEPTANCE_TEST_SECRET_KEY_MINIMUM_FORTY_EIGHT_BYTES_LONG_2026_SECURE_HMAC',
     DISABLE_BACKGROUND_JOBS: 'true',
-    ENABLE_SWAGGER: 'false'
+    ENABLE_SWAGGER: 'false',
+    NODE_PATH: path.join(candidateRuntimeDir, 'node_modules')
   };
+  delete serverEnv.npm_config_prefix;
 
-  const serverProc = spawn(process.execPath, [candidateMain], {
+  serverProc = spawn(process.execPath, [candidateMain], {
     env: serverEnv,
-    cwd: targetDir,
+    cwd: candidateRuntimeDir,
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
@@ -711,11 +744,15 @@ async function run() {
 
   } finally {
     // Graceful and complete teardown of candidate server
-    console.log('[ACCEPTANCE] Stopping candidate backend...');
-    serverProc.kill('SIGTERM');
-    await sleep(1000);
-    try { serverProc.kill('SIGKILL'); } catch {}
-    await prisma.$disconnect();
+    if (serverProc) {
+      console.log('[ACCEPTANCE] Stopping candidate backend...');
+      try { serverProc.kill('SIGTERM'); } catch {}
+      await sleep(1000);
+      try { serverProc.kill('SIGKILL'); } catch {}
+    }
+    if (prisma) {
+      try { await prisma.$disconnect(); } catch {}
+    }
   }
 }
 

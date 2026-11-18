@@ -61,10 +61,20 @@ $reportData = [ordered]@{
         deployment    = "NOT_STARTED"
         health        = "NOT_STARTED"
     }
-    acceptanceResults = $null
-    stateMachine      = "INITIALIZED"
-    result            = "PREFLIGHT_FAILED"
-    error             = $null
+    durations         = [ordered]@{
+        manifestVerificationMs    = 0
+        archiveExtractionMs       = 0
+        fingerprintVerificationMs = 0
+        oldRuntimeBackupMs        = 0
+        deploymentMs              = 0
+        rollbackMs                = 0
+    }
+    acceptanceResults    = $null
+    stateMachine         = "INITIALIZED"
+    result               = "PREFLIGHT_FAILED"
+    lastSuccessfulState  = "INITIALIZED"
+    rollbackTriggerPhase = $null
+    error                = $null
 }
 
 function Save-Report([string]$destDir) {
@@ -147,17 +157,31 @@ try {
     }
     $manifest = Get-Content -LiteralPath $manifestFile -Encoding UTF8 | ConvertFrom-Json
     Write-InfoLog "Verifying manifest hashes..."
-    foreach ($item in $manifest.files) {
-        $fullPath = Join-Path $scriptDir ($item.path.Replace('/', '\'))
-        if (-not (Test-Path -LiteralPath $fullPath)) {
-            throw "Package file missing according to manifest: $($item.path)"
+    $swManifest = [System.Diagnostics.Stopwatch]::StartNew()
+    $manifestHasher = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        foreach ($item in $manifest.files) {
+            $fullPath = Join-Path $scriptDir ($item.path.Replace('/', '\'))
+            if (-not (Test-Path -LiteralPath $fullPath)) {
+                throw "Package file missing according to manifest: $($item.path)"
+            }
+            $stream = [System.IO.File]::OpenRead($fullPath)
+            try {
+                $hashBytes = $manifestHasher.ComputeHash($stream)
+                $h = [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLowerInvariant()
+                if ($h -ne $item.sha256) {
+                    throw "Hash mismatch for package file: $($item.path)"
+                }
+            } finally {
+                $stream.Close()
+            }
         }
-        $h = Calculate-FileSHA256 $fullPath
-        if ($h -ne $item.sha256) {
-            throw "Hash mismatch for package file: $($item.path)"
-        }
+    } finally {
+        $manifestHasher.Dispose()
     }
-    Write-SuccessLog "Package integrity verified."
+    $swManifest.Stop()
+    $reportData.durations.manifestVerificationMs = $swManifest.ElapsedMilliseconds
+    Write-SuccessLog "Package integrity verified in $($swManifest.ElapsedMilliseconds) ms."
 
     # 1.6 Environment Configuration Parsing
     $dbConnStr = $null
@@ -213,11 +237,57 @@ try {
 
     Write-InfoLog "Discovered PostgreSQL tools: psql=$($pgTools.psql), pg_dump=$($pgTools.pg_dump), pg_restore=$($pgTools.pg_restore)"
 
-    # 1.8 Verify Candidate Prisma Runtime Closure (RR3-02)
+    # 1.8 Verify Candidate Server Runtime & Prisma CLI (Section 3.1 & 3.3, Revision 2)
     $payloadDir = Join-Path $scriptDir "payload"
-    $candidatePrismaCli = Join-Path $payloadDir "prisma-runtime\node_modules\prisma\build\index.js"
-    if (-not (Test-Path -LiteralPath $candidatePrismaCli)) {
-        throw "PREFLIGHT_FAILED: Candidate Prisma runtime CLI missing: $candidatePrismaCli"
+    $candidateMetadataFile = if (Test-Path -LiteralPath (Join-Path $payloadDir "runtime-metadata.json")) {
+        Join-Path $payloadDir "runtime-metadata.json"
+    } else {
+        Join-Path $payloadDir "server-runtime\runtime-metadata.json"
+    }
+    if (-not (Test-Path -LiteralPath $candidateMetadataFile)) {
+        throw "PREFLIGHT_FAILED: Candidate runtime metadata missing: $candidateMetadataFile"
+    }
+    $candMeta = Get-Content -LiteralPath $candidateMetadataFile -Raw -Encoding UTF8 | ConvertFrom-Json
+
+    # R2-02 Check: Enforce supported Node version on candidate runtime
+    if (-not (Test-NodeVersionSupported $candMeta.nodeVersion)) {
+        throw "PREFLIGHT_FAILED (R2-02): Candidate runtime was built with unsupported Node.js version '$($candMeta.nodeVersion)'. Required: Node 20.19+ or Node 22."
+    }
+
+    $runtimeZip = Join-Path $payloadDir "server-runtime.zip"
+    $hasRuntimeZip = Test-Path -LiteralPath $runtimeZip
+    $hasExpandedRuntime = Test-Path -LiteralPath (Join-Path $payloadDir "server-runtime")
+    if (-not $hasRuntimeZip -and -not $hasExpandedRuntime) {
+        throw "PREFLIGHT_FAILED: Candidate server runtime archive missing: $runtimeZip"
+    }
+
+    $reportData.candidateRuntime = [ordered]@{
+        fingerprint      = $candMeta.runtimeFingerprint
+        totalFiles       = $candMeta.runtimeFileCount
+        totalBytes       = $candMeta.runtimeTotalBytes
+        sourceLockSha256 = $candMeta.sourceLockSha256
+        nodeVersion      = $candMeta.nodeVersion
+    }
+
+    # 1.8.1 Dynamic Free Disk Space Calculation & Preflight Gate (Section 3.7)
+    $candBytes = [int64]$candMeta.runtimeTotalBytes
+    $diskCalc = Calculate-RequiredFreeDiskSpace -TargetDir $targetDir -CandidateRuntimeBytes $candBytes -FloorRequiredMB 2048 -SafetyReserveBytes (1024 * 1024 * 1024) -DbDumpAllowanceBytes (500 * 1024 * 1024)
+    $reportData.diskSpace = [ordered]@{
+        targetVolume         = $diskCalc.TargetDrive
+        availableFreeBytes   = $diskCalc.AvailableBytes
+        requiredBytes        = $diskCalc.RequiredBytes
+        availableMB          = $diskCalc.AvailableMB
+        requiredMB           = $diskCalc.RequiredMB
+        calculationBreakdown = [ordered]@{
+            oldRuntimeMB       = $diskCalc.OldRuntimeMB
+            candidateRuntimeMB = $diskCalc.CandidateRuntimeMB
+            floorRequiredMB    = 2048
+        }
+    }
+
+    Write-InfoLog "Disk space check: Available = $($diskCalc.AvailableMB) MB, Required = $($diskCalc.RequiredMB) MB"
+    if (-not $diskCalc.HasSufficientSpace) {
+        throw "PREFLIGHT_FAILED: Insufficient free disk space on volume $($diskCalc.TargetDrive). Available: $($diskCalc.AvailableMB) MB, Required: $($diskCalc.RequiredMB) MB."
     }
 
     # 1.9 Detect Run Mode (RR4-05, RR5-05)
@@ -306,6 +376,7 @@ try {
 
     $reportData.phases.preflight = "SUCCESS"
     $reportData.stateMachine = "PREFLIGHT_PASSED"
+    $reportData.lastSuccessfulState = "PREFLIGHT_PASSED"
     Write-SuccessLog "Preflight checks passed."
 
 } catch {
@@ -348,24 +419,43 @@ try {
         Copy-DirectorySafely -SourceDir (Join-Path $targetDir "prisma\migrations") -DestinationDir (Join-Path $appBackupDir "prisma\migrations")
     }
 
-    # Backup Target Managed Prisma Runtime Subtrees (RR6-01)
-    $runtimeBackupDir = Join-Path $appBackupDir "runtime-backup"
-    $runtimeHashes = [ordered]@{}
-    $managedSubtrees = @("prisma", "@prisma", ".prisma")
-    foreach ($sub in $managedSubtrees) {
-        $tgtSubPath = Join-Path $targetDir "node_modules\$sub"
-        if (Test-Path -LiteralPath $tgtSubPath) {
-            $destSubPath = Join-Path $runtimeBackupDir "node_modules\$sub"
-            Write-InfoLog "Backing up pre-upgrade runtime subtree $sub to: $destSubPath..."
-            Copy-DirectorySafely -SourceDir $tgtSubPath -DestinationDir $destSubPath
-            Get-ChildItem -LiteralPath $tgtSubPath -Recurse -File | ForEach-Object {
-                $rel = $_.FullName.Substring($tgtSubPath.Length).TrimStart('\', '/')
-                $runtimeHashes["$sub/$rel"] = Calculate-FileSHA256 $_.FullName
-            }
+    # 2.1.1 Full Target node_modules Backup & Manifest (Section 3.5 & 3.6)
+    $targetNodeModules = Join-Path $targetDir "node_modules"
+    $nodeModulesBackupDir = Join-Path $appBackupDir "node_modules-backup"
+    if (Test-Path -LiteralPath $targetNodeModules) {
+        Write-InfoLog "Computing baseline target node_modules fingerprint and manifest..."
+        $targetFpObj = Compute-DirectoryFingerprint -DirPath $targetNodeModules -IncludeFileMap
+        Write-InfoLog "Target node_modules: $($targetFpObj.TotalFiles) files, $([Math]::Round($targetFpObj.TotalBytes / 1MB, 2)) MB, Fingerprint: $($targetFpObj.Fingerprint)"
+
+        Write-InfoLog "Backing up complete target node_modules to: $nodeModulesBackupDir..."
+        $swBackup = [System.Diagnostics.Stopwatch]::StartNew()
+        Copy-DirectorySafely -SourceDir $targetNodeModules -DestinationDir $nodeModulesBackupDir
+        $swBackup.Stop()
+        $reportData.durations.oldRuntimeBackupMs = $swBackup.ElapsedMilliseconds
+
+        $backupFpObj = Compute-DirectoryFingerprint -DirPath $nodeModulesBackupDir
+        if ($backupFpObj.Fingerprint -ne $targetFpObj.Fingerprint) {
+            throw "BACKUP_FAILED: node_modules backup verification failed! Target FP: $($targetFpObj.Fingerprint), Backup FP: $($backupFpObj.Fingerprint)"
         }
+
+        $runtimeManifestObj = [ordered]@{
+            targetDirectory = $targetDir
+            backupTimestamp = $timestamp
+            totalFiles      = $targetFpObj.TotalFiles
+            totalBytes      = $targetFpObj.TotalBytes
+            fingerprint     = $targetFpObj.Fingerprint
+            files           = $targetFpObj.Files
+        }
+        $runtimeManifestPath = Join-Path $appBackupDir "runtime-backup-manifest.json"
+        $runtimeManifestJson = $runtimeManifestObj | ConvertTo-Json -Depth 6
+        [System.IO.File]::WriteAllText($runtimeManifestPath, $runtimeManifestJson, [System.Text.UTF8Encoding]::new($false))
+        $runtimeManifestSha256 = Calculate-FileSHA256 $runtimeManifestPath
+
+        $reportData.backupPaths.nodeModulesBackup = $nodeModulesBackupDir
+        $reportData.backupPaths.runtimeBackupManifest = $runtimeManifestPath
+        $reportData.backupPaths.runtimeBackupManifestSha256 = $runtimeManifestSha256
+        $reportData.backupPaths.runtimeBackupFingerprint = $targetFpObj.Fingerprint
     }
-    $reportData.backupPaths.runtimeBackup = $runtimeBackupDir
-    $reportData.backupPaths.runtimeFileHashes = $runtimeHashes
 
     # 2.2 Database Custom-format Dump
     $dbDumpFile = Join-Path $backupDir "database_backup.dump"
@@ -403,6 +493,7 @@ try {
     Write-SuccessLog "Database dump archive verified with pg_restore --list."
 
     $reportData.stateMachine = "BACKUP_CREATED"
+    $reportData.lastSuccessfulState = "BACKUP_CREATED"
     $reportData.phases.backup = "SUCCESS"
     Write-SuccessLog "Backup completed successfully."
 
@@ -461,6 +552,32 @@ try {
     }
     Write-SuccessLog "Database table count comparison verified successfully."
 
+    # Extract candidate server-runtime.zip once to GUID staging directory on target volume (Section 3.5, Revision 2)
+    $stagedRuntimeDir = Join-Path $targetDir ".staging_runtime_$runId"
+    if ($hasRuntimeZip) {
+        $swExtract = [System.Diagnostics.Stopwatch]::StartNew()
+        Extract-RuntimeArchive -ArchiveZipPath $runtimeZip -DestinationDir $stagedRuntimeDir
+        $swExtract.Stop()
+        $reportData.durations.archiveExtractionMs = $swExtract.ElapsedMilliseconds
+
+        $swFp = [System.Diagnostics.Stopwatch]::StartNew()
+        $stagedFpObj = Compute-DirectoryFingerprint -DirPath (Join-Path $stagedRuntimeDir "node_modules")
+        $swFp.Stop()
+        $reportData.durations.fingerprintVerificationMs = $swFp.ElapsedMilliseconds
+
+        if ($stagedFpObj.Fingerprint -ne $candMeta.runtimeFingerprint) {
+            throw "PREFLIGHT_FAILED: Staged runtime fingerprint mismatch! Expected: $($candMeta.runtimeFingerprint), Computed: $($stagedFpObj.Fingerprint)"
+        }
+        Write-SuccessLog "Staged candidate runtime fingerprint verified successfully ($($stagedFpObj.Fingerprint)) in $($swFp.ElapsedMilliseconds) ms."
+    } else {
+        $stagedRuntimeDir = Join-Path $payloadDir "server-runtime"
+    }
+
+    $candidatePrismaCli = Join-Path $stagedRuntimeDir "node_modules\prisma\build\index.js"
+    if (-not (Test-Path -LiteralPath $candidatePrismaCli)) {
+        throw "PREFLIGHT_FAILED: Candidate Prisma runtime CLI missing: $candidatePrismaCli"
+    }
+
     # Apply candidate migrations on temp DB using candidate runtime strictly (RR3-02)
     $tempDbUrl = "postgresql://$($dbConn.User):$($dbConn.Password)@$($dbConn.Host):$($dbConn.Port)/$tempDbName"
     $candSchema = Join-Path $payloadDir "prisma\schema.prisma"
@@ -484,7 +601,8 @@ try {
     $accEnv = @{
         "ACCEPTANCE_DATABASE_URL" = $tempDbUrl
         "TARGET_DIRECTORY"        = $targetDir
-        "CANDIDATE_DIST_DIR"      = (Join-Path $payloadDir "dist")
+        "CANDIDATE_RUNTIME_DIR"   = $stagedRuntimeDir
+        "CANDIDATE_DIST_DIR"      = (Join-Path $stagedRuntimeDir "dist")
     }
     $accArgs = @($acceptanceRunner)
     $accRes = Execute-NativeProcessSafely -Executable $nodeExe -Arguments $accArgs -EnvironmentVariables $accEnv -TimeoutSeconds 180
@@ -503,6 +621,7 @@ try {
     }
 
     $reportData.stateMachine = "TEMP_ACCEPTANCE_PASSED"
+    $reportData.lastSuccessfulState = "TEMP_ACCEPTANCE_PASSED"
     $reportData.phases.acceptance = "SUCCESS"
 
     # Second Confirmation before changing production
@@ -513,6 +632,9 @@ try {
         if ($conf2 -ne "DEPLOY APPROVED CANDIDATE") {
             $reportData.result = "CANCELLED"
             Write-WarnLog "Deployment cancelled by operator."
+            if ($stagedRuntimeDir -and (Test-Path -LiteralPath $stagedRuntimeDir) -and $hasRuntimeZip) {
+                Remove-Item -LiteralPath $stagedRuntimeDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
             exit 0
         }
     }
@@ -531,6 +653,11 @@ try {
         }
     } catch {}
 
+    # Clean up staged runtime on acceptance failure
+    if ($stagedRuntimeDir -and (Test-Path -LiteralPath $stagedRuntimeDir) -and $hasRuntimeZip) {
+        Remove-Item -LiteralPath $stagedRuntimeDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
     Save-Report $backupDir
     exit 1
 }
@@ -541,10 +668,39 @@ try {
 try {
     $reportData.phases.deployment = "IN_PROGRESS"
 
+    # Pre-deployment staging assertion (R3-01)
+    Write-InfoLog "Asserting integrity and presence of staged candidate runtime..."
+    $candidatePrismaCli = Join-Path $stagedRuntimeDir "node_modules\prisma\build\index.js"
+    $stagedDistDir = Join-Path $stagedRuntimeDir "dist"
+    $stagedModulesDir = Join-Path $stagedRuntimeDir "node_modules"
+    $stagedPkgJson = Join-Path $stagedRuntimeDir "package.json"
+    $stagedLockJson = Join-Path $stagedRuntimeDir "package-lock.json"
+
+    if (-not (Test-Path -LiteralPath $stagedRuntimeDir)) {
+        throw "PREFLIGHT_FAILED: Staged runtime directory does not exist: $stagedRuntimeDir"
+    }
+    if (-not (Test-Path -LiteralPath $candidatePrismaCli)) {
+        throw "PREFLIGHT_FAILED: Staged Prisma CLI does not exist: $candidatePrismaCli"
+    }
+    if (-not (Test-Path -LiteralPath $stagedDistDir)) {
+        throw "PREFLIGHT_FAILED: Staged dist directory does not exist: $stagedDistDir"
+    }
+    if (-not (Test-Path -LiteralPath $stagedModulesDir)) {
+        throw "PREFLIGHT_FAILED: Staged node_modules directory does not exist: $stagedModulesDir"
+    }
+    if (-not (Test-Path -LiteralPath $stagedPkgJson)) {
+        throw "PREFLIGHT_FAILED: Staged package.json does not exist: $stagedPkgJson"
+    }
+    if (-not (Test-Path -LiteralPath $stagedLockJson)) {
+        throw "PREFLIGHT_FAILED: Staged package-lock.json does not exist: $stagedLockJson"
+    }
+    Write-SuccessLog "Staged candidate runtime assertion passed."
+
     # Stop target process safely according to detected run mode
     Write-InfoLog "Stopping target application using run mode $($runModeInfo.Mode)..."
     Stop-ApplicationRunMode -RunModeInfo $runModeInfo -TargetDir $targetDir -Port $appPort | Out-Null
     $reportData.stateMachine = "PRODUCTION_STOPPED"
+    $reportData.lastSuccessfulState = "PRODUCTION_STOPPED"
 
     # Apply Prisma Migrations to Production DB using candidate runtime strictly
     Write-InfoLog "Applying prisma migrations to production database using candidate runtime..."
@@ -555,31 +711,29 @@ try {
         throw "Production prisma migrate deploy failed: $($prodMigRes.StdErr)"
     }
     $reportData.stateMachine = "PRODUCTION_MIGRATED"
+    $reportData.lastSuccessfulState = "PRODUCTION_MIGRATED"
 
-    # Exact Atomic Directory Swap for dist, frontend/dist, and prisma
-    Write-InfoLog "Performing exact directory swap for candidate dist and frontend/dist..."
-    Swap-DirectoryExact -SourceDir (Join-Path $payloadDir "dist") -TargetDir (Join-Path $targetDir "dist") -BackupDir (Join-Path $appBackupDir "dist_swap_backup")
-    Swap-DirectoryExact -SourceDir (Join-Path $payloadDir "frontend\dist") -TargetDir (Join-Path $targetDir "frontend\dist") -BackupDir (Join-Path $appBackupDir "frontend_dist_swap_backup")
+    # Atomic Guarded Directory Deployment using the ALREADY VERIFIED staged runtime (Section 3.5, Revision 2)
+    $swDeploy = [System.Diagnostics.Stopwatch]::StartNew()
+    Write-InfoLog "Activating verified candidate runtime into target via guarded atomic swap..."
+    Deploy-VerifiedRuntimeGuarded -StagedRuntimeDir $stagedRuntimeDir -TargetDir $targetDir -RunId $runId
+
+    Write-InfoLog "Deploying frontend dist via guarded atomic staging..."
+    Deploy-DirectoryGuarded -SourceDir (Join-Path $payloadDir "frontend\dist") -TargetDir (Join-Path $targetDir "frontend\dist")
+
     Copy-Item -LiteralPath (Join-Path $payloadDir "prisma\schema.prisma") -Destination (Join-Path $targetDir "prisma\schema.prisma") -Force
     if (Test-Path -LiteralPath (Join-Path $payloadDir "prisma\migrations")) {
-        Swap-DirectoryExact -SourceDir (Join-Path $payloadDir "prisma\migrations") -TargetDir (Join-Path $targetDir "prisma\migrations") -BackupDir (Join-Path $appBackupDir "prisma_migrations_backup")
+        Deploy-DirectoryGuarded -SourceDir (Join-Path $payloadDir "prisma\migrations") -TargetDir (Join-Path $targetDir "prisma\migrations")
     }
 
-    # Deploy candidate Prisma runtime using exact swap per managed subtree (RR6-01)
-    $candidateRuntimeModules = Join-Path $payloadDir "prisma-runtime\node_modules"
-    if (Test-Path -LiteralPath $candidateRuntimeModules) {
-        Write-InfoLog "Deploying candidate Prisma runtime subtrees via exact swap..."
-        foreach ($sub in $managedSubtrees) {
-            $candSub = Join-Path $candidateRuntimeModules $sub
-            $tgtSub = Join-Path $targetDir "node_modules\$sub"
-            $bSub = Join-Path $appBackupDir "runtime_swap_backup\$sub"
-            if (Test-Path -LiteralPath $candSub) {
-                Swap-DirectoryExact -SourceDir $candSub -TargetDir $tgtSub -BackupDir $bSub
-            }
-        }
-    }
+    Copy-Item -LiteralPath (Join-Path $stagedRuntimeDir "package.json") -Destination (Join-Path $targetDir "package.json") -Force
+    Copy-Item -LiteralPath (Join-Path $stagedRuntimeDir "package-lock.json") -Destination (Join-Path $targetDir "package-lock.json") -Force
+    Copy-Item -LiteralPath $candidateMetadataFile -Destination (Join-Path $targetDir "runtime-metadata.json") -Force
+    $swDeploy.Stop()
+    $reportData.durations.deploymentMs = $swDeploy.ElapsedMilliseconds
 
     $reportData.stateMachine = "FILES_SWAPPED"
+    $reportData.lastSuccessfulState = "FILES_SWAPPED"
     $reportData.phases.deployment = "SUCCESS"
 
     # --------------------------------------------------------------------------------
@@ -591,6 +745,7 @@ try {
     Start-ApplicationRunMode -RunModeInfo $runModeInfo -TargetDir $targetDir -NodeExe $nodeExe | Out-Null
     Start-Sleep -Seconds 3
     $reportData.stateMachine = "APPLICATION_RESTARTED"
+    $reportData.lastSuccessfulState = "APPLICATION_RESTARTED"
 
     # Verify listening process owner and target path (RR6-05)
     $postDeployRunMode = Detect-ApplicationRunMode -TargetDir $targetDir -Port $appPort
@@ -663,6 +818,7 @@ try {
     }
 
     $reportData.stateMachine = "POST_DEPLOY_VERIFIED"
+    $reportData.lastSuccessfulState = "POST_DEPLOY_VERIFIED"
     $reportData.phases.health = "SUCCESS"
     $reportData.stateMachine = "SUCCESS"
     $reportData.result = "SUCCESS"
@@ -671,17 +827,39 @@ try {
     exit 0
 
 } catch {
-    Write-FailureLog "Deployment failed: $_. Initiating automatic rollback..."
+    $errStr = $_.ToString()
+    Write-FailureLog "Deployment failed: $errStr. Initiating automatic rollback..."
+
+    $triggerPhase = if ($reportData.phases.health -eq "IN_PROGRESS") {
+        "HEALTH"
+    } elseif ($reportData.phases.deployment -eq "IN_PROGRESS") {
+        if ($reportData.stateMachine -eq "FILES_SWAPPED" -or $reportData.stateMachine -eq "APPLICATION_RESTARTED") {
+            "POST_DEPLOY_VERIFICATION"
+        } elseif ($reportData.stateMachine -eq "PRODUCTION_MIGRATED") {
+            "ACTIVATION"
+        } else {
+            "MIGRATION"
+        }
+    } else {
+        "DEPLOYMENT"
+    }
+    $reportData.rollbackTriggerPhase = $triggerPhase
+    if ($triggerPhase -eq "HEALTH") {
+        $reportData.phases.health = "FAILED"
+    } else {
+        $reportData.phases.deployment = "FAILED"
+    }
+
     $reportData.stateMachine = "ROLLBACK_IN_PROGRESS"
     $reportData.result = "DEPLOYMENT_FAILED_ROLLED_BACK"
-    $reportData.error = Sanitize-LogText $_.ToString()
+    $reportData.error = Sanitize-LogText $errStr
     Save-Report $backupDir
 
     # LC-08: Safely terminate the currently running process on target port/directory
     try {
         Terminate-TargetProcessOnly -TargetDir $targetDir -Port $appPort | Out-Null
     } catch {
-        Write-WarningLog "Could not terminate currently running target process: $_"
+        Write-WarnLog "Could not terminate currently running target process: $_"
     }
 
     # LC-07: Perform Rollback and explicitly verify its exit code and report outcome
@@ -694,7 +872,10 @@ try {
         if ($env:MADARCORE_LAB_AUTH_TOKEN) { $rbEnv["MADARCORE_LAB_AUTH_TOKEN"] = $env:MADARCORE_LAB_AUTH_TOKEN }
         if ($env:MADARCORE_LAB_ROOT) { $rbEnv["MADARCORE_LAB_ROOT"] = $env:MADARCORE_LAB_ROOT }
         $rbArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $rollbackScript, "-ReportPath", $rollbackReportPath, "-TargetDirectory", $targetDir, "-Force")
+        $swRb = [System.Diagnostics.Stopwatch]::StartNew()
         $rbRes = Execute-NativeProcessSafely -Executable "powershell.exe" -Arguments $rbArgs -EnvironmentVariables $rbEnv -TimeoutSeconds 300
+        $swRb.Stop()
+        $reportData.durations.rollbackMs = $swRb.ElapsedMilliseconds
         $rollbackExit = $rbRes.ExitCode
         if ($rbRes.StdOut) { Write-InfoLog $rbRes.StdOut }
         if ($rbRes.StdErr) { Write-WarnLog $rbRes.StdErr }
@@ -730,4 +911,8 @@ try {
 
     Save-Report $backupDir
     exit 1
+} finally {
+    if ($stagedRuntimeDir -and (Test-Path -LiteralPath $stagedRuntimeDir) -and $hasRuntimeZip) {
+        Remove-Item -LiteralPath $stagedRuntimeDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }

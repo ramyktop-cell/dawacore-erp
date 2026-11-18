@@ -5,11 +5,80 @@
 
 param(
     [switch]$SkipTests,
-    [switch]$PackageOnly
+    [switch]$PackageOnly,
+    [string]$NodeExecutable = ""
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'
+
+function Resolve-SupportedNodeToolchain {
+    param(
+        [string]$ExplicitNode = ""
+    )
+    $candidateNodes = [System.Collections.Generic.List[string]]::new()
+    if (-not [string]::IsNullOrWhiteSpace($ExplicitNode)) {
+        if (-not (Test-Path -LiteralPath $ExplicitNode)) {
+            throw "R3-03 ERROR: Specified NodeExecutable does not exist: $ExplicitNode"
+        }
+        $candidateNodes.Add((Resolve-Path -LiteralPath $ExplicitNode).Path)
+    }
+
+    $pathDirs = ($env:Path -split ';') | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    foreach ($p in $pathDirs) {
+        $nodeInP = Join-Path $p "node.exe"
+        if (Test-Path -LiteralPath $nodeInP) {
+            $candidateNodes.Add((Resolve-Path -LiteralPath $nodeInP).Path)
+        }
+    }
+
+    $foundNode = $null
+    $foundNpm = $null
+    $nodeVersionStr = ""
+
+    foreach ($cand in $candidateNodes) {
+        try {
+            $ver = (& $cand -v 2>$null).ToString().Trim()
+            $match = [regex]::Match($ver, '^v?(\d+)\.(\d+)(?:\.(\d+))?')
+            if ($match.Success) {
+                $maj = [int]$match.Groups[1].Value
+                $min = [int]$match.Groups[2].Value
+                if (($maj -eq 20 -and $min -ge 19) -or ($maj -eq 22)) {
+                    $foundNode = $cand
+                    $nodeVersionStr = $ver
+                    $nodeDir = Split-Path -Parent $cand
+                    $npmCmd = Join-Path $nodeDir "npm.cmd"
+                    $npmCli = Join-Path $nodeDir "node_modules\npm\bin\npm-cli.js"
+                    if (Test-Path -LiteralPath $npmCmd) {
+                        $foundNpm = $npmCmd
+                    } elseif (Test-Path -LiteralPath $npmCli) {
+                        $foundNpm = $npmCli
+                    } else {
+                        $foundNpm = "npm"
+                    }
+                    break
+                }
+            }
+        } catch {}
+    }
+
+    if (-not $foundNode) {
+        throw "R3-03 ERROR: No supported Node.js installation (Node 20.19+ or Node 22 LTS) found. Please supply -NodeExecutable <path\\to\\node.exe> or ensure a supported Node is on PATH."
+    }
+
+    $nodeDir = Split-Path -Parent $foundNode
+    $env:Path = "$nodeDir;" + $env:Path
+
+    return [PSCustomObject]@{
+        NodeExe     = $foundNode
+        NpmExe      = $foundNpm
+        NodeVersion = $nodeVersionStr
+        NodeDir     = $nodeDir
+    }
+}
+
+$nodeToolchain = Resolve-SupportedNodeToolchain -ExplicitNode $NodeExecutable
+Write-Host "[PREFLIGHT] Node.js toolchain verified: $($nodeToolchain.NodeVersion) at $($nodeToolchain.NodeExe)" -ForegroundColor Green
 
 $rootDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $installerBase = Join-Path $rootDir "installer_package"
@@ -18,6 +87,8 @@ $outputBase = Join-Path $installerBase "Output"
 $releaseId = "MadarCore-Client-Upgrade-20261116"
 $stagingDir = Join-Path $outputBase $releaseId
 $zipOutputPath = Join-Path $outputBase "$releaseId.zip"
+
+. (Join-Path $pkgSourceDir "upgrade-common.ps1")
 
 Write-Host "========================================================================" -ForegroundColor Cyan
 Write-Host "  Building $releaseId  " -ForegroundColor Cyan
@@ -70,10 +141,134 @@ Copy-Item (Join-Path $pkgSourceDir "rollback-madarcore-upgrade.ps1") (Join-Path 
 Copy-Item (Join-Path $pkgSourceDir "README-AR.txt") (Join-Path $stagingDir "README-AR.txt") -Force
 Copy-Item (Join-Path $pkgSourceDir "compatibility.json") (Join-Path $stagingDir "compatibility.json") -Force
 
-# 4. Populate Payload (dist, frontend/dist, prisma, acceptance runner)
-Write-Host "[INFO] Copying backend dist..." -ForegroundColor Cyan
-Copy-Item -Path (Join-Path $rootDir "dist") -Destination (Join-Path $payloadDir "dist") -Recurse -Force
+# 4. Clean Build of Candidate Server Runtime (Section 3.1 & 3.2)
+Write-Host "[INFO] Assembling clean, self-contained server runtime for candidate package..." -ForegroundColor Cyan
+$prevPup = $env:PUPPETEER_SKIP_DOWNLOAD
+$prevChrom = $env:PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+$prevPrisma = $env:PRISMA_SKIP_POSTINSTALL_GENERATE
+$tempWorkspace = Join-Path $env:TEMP "MadarCore_Runtime_Build_$([Guid]::NewGuid().ToString('N'))"
 
+try {
+    New-Item -ItemType Directory -Path $tempWorkspace -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $rootDir "package.json") -Destination (Join-Path $tempWorkspace "package.json") -Force
+    Copy-Item -LiteralPath (Join-Path $rootDir "package-lock.json") -Destination (Join-Path $tempWorkspace "package-lock.json") -Force
+
+    $env:PUPPETEER_SKIP_DOWNLOAD = "true"
+    $env:PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
+    $env:PRISMA_SKIP_POSTINSTALL_GENERATE = "true"
+
+    Write-Host "[INFO] Running clean npm ci --omit=dev in isolated runtime workspace..." -ForegroundColor Cyan
+    & npm ci --prefix "$tempWorkspace" --omit=dev --ignore-scripts --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0) {
+        throw "Build Gate Failure: Clean npm ci failed in temporary runtime workspace."
+    }
+
+    # Generate Prisma Client explicitly using candidate schema and candidate Prisma CLI
+    $tempPrismaDir = Join-Path $tempWorkspace "prisma"
+    New-Item -ItemType Directory -Path $tempPrismaDir -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $rootDir "prisma\schema.prisma") -Destination (Join-Path $tempPrismaDir "schema.prisma") -Force
+    $candPrismaCli = Join-Path $tempWorkspace "node_modules\prisma\build\index.js"
+    if (-not (Test-Path -LiteralPath $candPrismaCli)) {
+        throw "Build Gate Failure: Prisma CLI build/index.js not found at $candPrismaCli"
+    }
+
+    Write-Host "[INFO] Generating Prisma client inside candidate runtime..." -ForegroundColor Cyan
+    & node $candPrismaCli generate --schema="$tempPrismaDir\schema.prisma"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Build Gate Failure: Candidate Prisma CLI generate failed."
+    }
+
+    Write-Host "[INFO] Running npm ls --omit=dev --all to verify runtime dependency closure..." -ForegroundColor Cyan
+    & npm ls --prefix "$tempWorkspace" --omit=dev --all
+    if ($LASTEXITCODE -ne 0) {
+        throw "Build Gate Failure: npm ls --omit=dev --all reported missing or invalid dependencies in candidate runtime."
+    }
+
+    # Copy compiled backend dist into tempWorkspace/dist
+    Write-Host "[INFO] Copying compiled backend dist into candidate runtime..." -ForegroundColor Cyan
+    Copy-Item -Path (Join-Path $rootDir "dist") -Destination (Join-Path $tempWorkspace "dist") -Recurse -Force
+
+    # Purge any *.tmp* files from runtime workspace
+    Get-ChildItem -LiteralPath $tempWorkspace -Recurse -File -Force | Where-Object { $_.Name -match '\.tmp' } | ForEach-Object {
+        Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+    }
+
+    # Compute runtime-metadata.json (Section 3.3)
+    Write-Host "[INFO] Computing candidate runtime fingerprint and metadata..." -ForegroundColor Cyan
+    $sourceLockSha256 = Calculate-FileSHA256 (Join-Path $rootDir "package-lock.json")
+    $nodeVer = (& node -v).ToString().Trim()
+    $npmVer = (& npm -v).ToString().Trim()
+
+    $pkgJsonContent = Get-Content -LiteralPath (Join-Path $rootDir "package.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+    $directDeps = [ordered]@{}
+    if ($pkgJsonContent.dependencies) {
+        foreach ($prop in $pkgJsonContent.dependencies.PSObject.Properties) {
+            $depName = $prop.Name
+            $depPkgJson = Join-Path $tempWorkspace "node_modules\$depName\package.json"
+            $instVer = if (Test-Path -LiteralPath $depPkgJson) {
+                (Get-Content -LiteralPath $depPkgJson -Raw -Encoding UTF8 | ConvertFrom-Json).version
+            } else {
+                $prop.Value
+            }
+            $directDeps[$depName] = $instVer
+        }
+    }
+
+    $runtimeModulesDir = Join-Path $tempWorkspace "node_modules"
+    $fpObj = Compute-DirectoryFingerprint -DirPath $runtimeModulesDir
+    Write-Host "[INFO] Candidate runtime node_modules fingerprint: $($fpObj.Fingerprint) ($($fpObj.TotalFiles) files, $([Math]::Round($fpObj.TotalBytes / 1MB, 2)) MB)" -ForegroundColor Cyan
+
+    $distFpObj = Compute-DirectoryFingerprint -DirPath (Join-Path $tempWorkspace "dist")
+    Write-Host "[INFO] Candidate runtime dist fingerprint: $($distFpObj.Fingerprint)" -ForegroundColor Cyan
+
+    $runtimeMetadataObj = [ordered]@{
+        schemaVersion        = "1.0.0"
+        releaseId            = $releaseId
+        generatedAt          = (Get-Date).ToString("yyyy-MM-ddTHH:mm:sszzz")
+        sourceLockSha256     = $sourceLockSha256
+        nodeVersion          = $nodeVer
+        npmVersion           = $npmVer
+        platform             = "win32"
+        arch                 = "x64"
+        distFingerprint      = $distFpObj.Fingerprint
+        runtimeFileCount     = $fpObj.TotalFiles
+        runtimeTotalBytes    = $fpObj.TotalBytes
+        runtimeFingerprint   = $fpObj.Fingerprint
+        directDependencies   = $directDeps
+    }
+    $runtimeMetadataJsonPath = Join-Path $tempWorkspace "runtime-metadata.json"
+    $runtimeMetaStr = $runtimeMetadataObj | ConvertTo-Json -Depth 5
+    [System.IO.File]::WriteAllText($runtimeMetadataJsonPath, $runtimeMetaStr, [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText((Join-Path $payloadDir "runtime-metadata.json"), $runtimeMetaStr, [System.Text.UTF8Encoding]::new($false))
+
+    # Compress tempWorkspace into payload/server-runtime.zip (R2-01)
+    $serverRuntimeZip = Join-Path $payloadDir "server-runtime.zip"
+    if (Test-Path -LiteralPath $serverRuntimeZip) {
+        Remove-Item -LiteralPath $serverRuntimeZip -Force
+    }
+    Write-Host "[INFO] Compressing candidate runtime into payload/server-runtime.zip..." -ForegroundColor Cyan
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::CreateFromDirectory($tempWorkspace, $serverRuntimeZip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
+    $runtimeZipSizeMB = [Math]::Round(((Get-Item $serverRuntimeZip).Length / 1MB), 2)
+    Write-Host "[SUCCESS] payload/server-runtime.zip created ($runtimeZipSizeMB MB)" -ForegroundColor Green
+
+    # Ensure no expanded payload/server-runtime directory exists in payload
+    $serverRuntimePayload = Join-Path $payloadDir "server-runtime"
+    if (Test-Path -LiteralPath $serverRuntimePayload) {
+        Remove-Item -LiteralPath $serverRuntimePayload -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+} finally {
+    $env:PUPPETEER_SKIP_DOWNLOAD = $prevPup
+    $env:PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = $prevChrom
+    $env:PRISMA_SKIP_POSTINSTALL_GENERATE = $prevPrisma
+
+    if (Test-Path -LiteralPath $tempWorkspace) {
+        Remove-Item -LiteralPath $tempWorkspace -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# 5. Populate Remaining Payload Components (frontend/dist, prisma, acceptance runner)
 Write-Host "[INFO] Copying frontend dist..." -ForegroundColor Cyan
 $frontPayload = Join-Path $payloadDir "frontend"
 New-Item -ItemType Directory -Path $frontPayload -Force | Out-Null
@@ -85,48 +280,17 @@ New-Item -ItemType Directory -Path $prismaPayload -Force | Out-Null
 Copy-Item (Join-Path $rootDir "prisma\schema.prisma") (Join-Path $prismaPayload "schema.prisma") -Force
 Copy-Item -Path (Join-Path $rootDir "prisma\migrations") -Destination (Join-Path $prismaPayload "migrations") -Recurse -Force
 
-Write-Host "[INFO] Copying candidate acceptance runner & runtime dependencies..." -ForegroundColor Cyan
+Write-Host "[INFO] Copying candidate acceptance runner..." -ForegroundColor Cyan
 $toolsPayload = Join-Path $payloadDir "tools"
 New-Item -ItemType Directory -Path $toolsPayload -Force | Out-Null
 Copy-Item (Join-Path $rootDir "tools\acceptance-upgrade.cjs") (Join-Path $toolsPayload "acceptance-upgrade.cjs") -Force
 
-# LC-09: Package bcryptjs runtime dependency into payload/tools/node_modules/bcryptjs
-$bcryptSrcDir = Join-Path $rootDir "node_modules\bcryptjs"
-$bcryptPkgJson = Join-Path $bcryptSrcDir "package.json"
-$bcryptUmdEntry = Join-Path $bcryptSrcDir "umd\index.js"
-if (-not (Test-Path -LiteralPath $bcryptPkgJson) -or -not (Test-Path -LiteralPath $bcryptUmdEntry)) {
-    throw "Build Gate Failure: bcryptjs runtime dependency is missing package.json or umd/index.js at $bcryptSrcDir"
+# Verify transitional structures are removed
+if (Test-Path -LiteralPath (Join-Path $payloadDir "prisma-runtime")) {
+    Remove-Item -LiteralPath (Join-Path $payloadDir "prisma-runtime") -Recurse -Force -ErrorAction SilentlyContinue
 }
-
-$toolsNodeModules = Join-Path $toolsPayload "node_modules"
-New-Item -ItemType Directory -Path $toolsNodeModules -Force | Out-Null
-$bcryptDestDir = Join-Path $toolsNodeModules "bcryptjs"
-Copy-Item -Path $bcryptSrcDir -Destination $bcryptDestDir -Recurse -Force
-if (-not (Test-Path -LiteralPath (Join-Path $bcryptDestDir "package.json")) -or -not (Test-Path -LiteralPath (Join-Path $bcryptDestDir "umd\index.js"))) {
-    throw "Build Gate Failure: Packaged bcryptjs is missing package.json or umd/index.js at $bcryptDestDir"
-}
-
-Get-ChildItem -LiteralPath $toolsNodeModules -Recurse -File | Where-Object { $_.Name -match '\.tmp' } | ForEach-Object {
-    Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
-}
-
-# 5. Populate Candidate Prisma Runtime Closure
-Write-Host "[INFO] Assembling candidate Prisma runtime closure under payload/prisma-runtime..." -ForegroundColor Cyan
-$runtimeDest = Join-Path $payloadDir "prisma-runtime\node_modules"
-New-Item -ItemType Directory -Path $runtimeDest -Force | Out-Null
-
-# Copy @prisma and prisma CLI
-Copy-Item -Path (Join-Path $rootDir "node_modules\prisma") -Destination (Join-Path $runtimeDest "prisma") -Recurse -Force
-Copy-Item -Path (Join-Path $rootDir "node_modules\@prisma") -Destination (Join-Path $runtimeDest "@prisma") -Recurse -Force
-
-# Copy .prisma/client
-$dotPrismaDest = Join-Path $runtimeDest ".prisma\client"
-New-Item -ItemType Directory -Path $dotPrismaDest -Force | Out-Null
-Copy-Item -Path (Join-Path $rootDir "node_modules\.prisma\client") -Destination (Join-Path $runtimeDest ".prisma") -Recurse -Force
-
-# Purge any *.tmp* files from the entire runtime tree (RR4-07)
-Get-ChildItem -LiteralPath $runtimeDest -Recurse -File | Where-Object { $_.Name -match '\.tmp' } | ForEach-Object {
-    Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+if (Test-Path -LiteralPath (Join-Path $payloadDir "tools\node_modules")) {
+    Remove-Item -LiteralPath (Join-Path $payloadDir "tools\node_modules") -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 # 6. Generate manifest.json with SHA-256 for all files in package
@@ -139,19 +303,22 @@ function Get-RelativePath([string]$basePath, [string]$targetPath) {
 }
 
 $hasher = [System.Security.Cryptography.SHA256]::Create()
-$filesList = @()
+$filesList = [System.Collections.Generic.List[object]]::new()
 
-Get-ChildItem -LiteralPath $stagingDir -Recurse -File | ForEach-Object {
-    $rel = Get-RelativePath $stagingDir $_.FullName
-    $stream = [System.IO.File]::OpenRead($_.FullName)
+$stagingFiles = [System.IO.Directory]::GetFiles($stagingDir, "*", [System.IO.SearchOption]::AllDirectories)
+$prefixLen = $stagingDir.Length
+foreach ($filePath in $stagingFiles) {
+    $rel = $filePath.Substring($prefixLen).TrimStart('\', '/').Replace('\', '/')
+    $stream = [System.IO.File]::OpenRead($filePath)
     try {
+        $len = $stream.Length
         $hashBytes = $hasher.ComputeHash($stream)
-        $sha = (-join ($hashBytes | ForEach-Object { $_.ToString("x2") }))
-        $filesList += [ordered]@{
+        $sha = [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLowerInvariant()
+        $filesList.Add([ordered]@{
             path   = $rel
-            size   = $_.Length
+            size   = $len
             sha256 = $sha
-        }
+        })
     } finally {
         $stream.Close()
     }
@@ -184,7 +351,7 @@ $zipHasher = [System.Security.Cryptography.SHA256]::Create()
 $zipStream = [System.IO.File]::OpenRead($zipOutputPath)
 try {
     $zBytes = $zipHasher.ComputeHash($zipStream)
-    $zipSha256 = (-join ($zBytes | ForEach-Object { $_.ToString("x2") }))
+    $zipSha256 = [System.BitConverter]::ToString($zBytes).Replace("-", "").ToLowerInvariant()
 } finally {
     $zipStream.Close()
     $zipHasher.Dispose()
@@ -201,6 +368,7 @@ if (-not $SkipTests -and -not $PackageOnly) {
     if ($LASTEXITCODE -ne 0) {
         Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $zipOutputPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath "$zipOutputPath.sha256" -Force -ErrorAction SilentlyContinue
         throw "Build Gate Failure: Static verifier rejected staged package or ZIP archive."
     }
 
@@ -212,6 +380,7 @@ if (-not $SkipTests -and -not $PackageOnly) {
             if ($LASTEXITCODE -ne 0) {
                 Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
                 Remove-Item -LiteralPath $zipOutputPath -Force -ErrorAction SilentlyContinue
+                Remove-Item -LiteralPath "$zipOutputPath.sha256" -Force -ErrorAction SilentlyContinue
                 throw "Build Gate Failure: FT test matrix failed on staged package."
             }
         } finally {
@@ -225,7 +394,10 @@ Write-Host "[INFO] Verifying created ZIP archive via isolated temp extraction...
 $testExtractDir = Join-Path $env:TEMP "MadarCore_Zip_Extract_$([Guid]::NewGuid().ToString('N'))"
 try {
     New-Item -ItemType Directory -Path $testExtractDir -Force | Out-Null
-    [System.IO.Compression.ZipFile]::ExtractToDirectory($zipOutputPath, $testExtractDir)
+    & tar.exe -xf "$zipOutputPath" -C "$testExtractDir"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to extract ZIP archive using tar.exe"
+    }
     $extractedTarget = if (Test-Path -LiteralPath (Join-Path $testExtractDir $releaseId)) { Join-Path $testExtractDir $releaseId } else { $testExtractDir }
     $verifierPath = Join-Path $rootDir "tools\verify-madarcore-client-upgrade.cjs"
     & node $verifierPath --dir $extractedTarget

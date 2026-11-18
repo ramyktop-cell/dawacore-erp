@@ -132,22 +132,34 @@ if ($appBackupDir -and (Test-Path -LiteralPath $appBackupDir)) {
         Copy-DirectorySafely -SourceDir $prismaMigSrc -DestinationDir $currMig
     }
 
-    # 6.5 استعادة Prisma runtime بتقنية exact swap وحذف الملفات المرشحة فقط (RR6-01)
-    $runtimeBackupDir = if ($report.backupPaths.runtimeBackup) { $report.backupPaths.runtimeBackup } else { Join-Path $appBackupDir "runtime-backup" }
-    $managedSubtrees = @("prisma", "@prisma", ".prisma")
-    foreach ($sub in $managedSubtrees) {
-        $tgtSub = Join-Path $resolvedTarget "node_modules\$sub"
-        $srcSub = Join-Path $runtimeBackupDir "node_modules\$sub"
-        if (Test-Path -LiteralPath $srcSub) {
-            Write-InfoLog "استعادة runtime subtree: $sub من النسخة الاحتياطية..."
-            if (Test-Path -LiteralPath $tgtSub) { Remove-Item -LiteralPath $tgtSub -Recurse -Force }
-            Copy-DirectorySafely -SourceDir $srcSub -DestinationDir $tgtSub
-        } else {
-            # لم تكن الشجرة موجودة قبل الترقية؛ يجب حذف الملفات المرشحة التي تم نسخها
-            if (Test-Path -LiteralPath $tgtSub) {
-                Write-InfoLog "حذف candidate-only subtree: $sub لعدم وجوده قبل الترقية..."
-                Remove-Item -LiteralPath $tgtSub -Recurse -Force
+    # 6.5 Full Previous node_modules Restoration via Guarded Helper (Section 3.6)
+    $nodeModulesBackupDir = Join-Path $appBackupDir "node_modules-backup"
+    $runtimeManifestPath = Join-Path $appBackupDir "runtime-backup-manifest.json"
+    $targetNodeModules = Join-Path $resolvedTarget "node_modules"
+
+    if (Test-Path -LiteralPath $nodeModulesBackupDir) {
+        # Check runtime manifest and hash if recorded in report
+        if ($report.backupPaths.runtimeBackupManifestSha256 -and (Test-Path -LiteralPath $runtimeManifestPath)) {
+            $actualManifestSha = Calculate-FileSHA256 $runtimeManifestPath
+            if ($actualManifestSha -ne $report.backupPaths.runtimeBackupManifestSha256) {
+                Write-FailureLog "CRITICAL: Runtime backup manifest hash mismatch! State is MANUAL_RECOVERY_REQUIRED."
+                exit 1
             }
+        }
+
+        Write-InfoLog "Restoring full previous node_modules from backup using guarded staging..."
+        Restore-DirectoryGuarded -BackupDir $nodeModulesBackupDir -TargetDir $targetNodeModules -ExpectedFingerprint $report.backupPaths.runtimeBackupFingerprint
+
+        $restoredFp = (Compute-DirectoryFingerprint -DirPath $targetNodeModules).Fingerprint
+        if ($report.backupPaths.runtimeBackupFingerprint -and $restoredFp -ne $report.backupPaths.runtimeBackupFingerprint) {
+            Write-FailureLog "CRITICAL: Restored node_modules fingerprint mismatch! Expected: $($report.backupPaths.runtimeBackupFingerprint), Restored: $restoredFp. State is MANUAL_RECOVERY_REQUIRED."
+            exit 1
+        }
+        Write-SuccessLog "Previous node_modules restored exactly (Fingerprint: $restoredFp)."
+    } else {
+        if (Test-Path -LiteralPath $targetNodeModules) {
+            Write-InfoLog "Removing candidate node_modules as no previous node_modules was backed up..."
+            Remove-Item -LiteralPath $targetNodeModules -Recurse -Force
         }
     }
 

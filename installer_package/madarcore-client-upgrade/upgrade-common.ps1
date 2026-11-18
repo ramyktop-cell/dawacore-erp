@@ -38,7 +38,7 @@ function Calculate-FileSHA256([string]$filePath) {
     $stream = [System.IO.File]::OpenRead($filePath)
     try {
         $hashBytes = $hasher.ComputeHash($stream)
-        return (-join ($hashBytes | ForEach-Object { $_.ToString("x2") }))
+        return [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLowerInvariant()
     } finally {
         $stream.Close()
         $hasher.Dispose()
@@ -311,9 +311,376 @@ function Copy-DirectorySafely {
     if (-not (Test-Path -LiteralPath $DestinationDir)) {
         New-Item -ItemType Directory -Path $DestinationDir -Force | Out-Null
     }
-    Get-ChildItem -LiteralPath $SourceDir -Force | ForEach-Object {
-        Copy-Item -LiteralPath $_.FullName -Destination $DestinationDir -Recurse -Force
+    & robocopy $SourceDir $DestinationDir /E /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
+    if ($LASTEXITCODE -ge 8) {
+        throw "Robocopy failed copying from $SourceDir to $DestinationDir (exit code: $LASTEXITCODE)"
     }
+}
+
+function Extract-RuntimeArchive {
+    param(
+        [Parameter(Mandatory = $true)][string]$ArchiveZipPath,
+        [Parameter(Mandatory = $true)][string]$DestinationDir
+    )
+
+    if (-not (Test-Path -LiteralPath $ArchiveZipPath)) {
+        throw "Runtime archive does not exist: $ArchiveZipPath"
+    }
+
+    if (-not (Test-Path -LiteralPath $DestinationDir)) {
+        New-Item -ItemType Directory -Path $DestinationDir -Force | Out-Null
+    }
+
+    Write-InfoLog "Extracting runtime archive: $ArchiveZipPath to $DestinationDir..."
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($ArchiveZipPath, $DestinationDir)
+    Write-SuccessLog "Runtime archive extracted successfully."
+}
+
+function Deploy-VerifiedRuntimeGuarded {
+    param(
+        [Parameter(Mandatory = $true)][string]$StagedRuntimeDir,
+        [Parameter(Mandatory = $true)][string]$TargetDir,
+        [string]$RunId = ""
+    )
+
+    if (-not (Test-Path -LiteralPath $StagedRuntimeDir)) {
+        throw "Staged runtime directory does not exist: $StagedRuntimeDir"
+    }
+
+    if ([string]::IsNullOrWhiteSpace($RunId)) {
+        $RunId = [Guid]::NewGuid().ToString("N")
+    }
+
+    $targetDist = Join-Path $TargetDir "dist"
+    $targetNodeModules = Join-Path $TargetDir "node_modules"
+    $quarantineDist = Join-Path $TargetDir ".quarantine_dist_$RunId"
+    $quarantineNodeModules = Join-Path $TargetDir ".quarantine_nodemodules_$RunId"
+
+    $hadDist = Test-Path -LiteralPath $targetDist
+    $hadNodeModules = Test-Path -LiteralPath $targetNodeModules
+
+    try {
+        # 1. Move existing target dist & node_modules to quarantine on same volume
+        if ($hadDist) {
+            Write-InfoLog "Quarantining current target dist to: $quarantineDist..."
+            Move-Item -LiteralPath $targetDist -Destination $quarantineDist -Force
+        }
+        if ($hadNodeModules) {
+            Write-InfoLog "Quarantining current target node_modules to: $quarantineNodeModules..."
+            Move-Item -LiteralPath $targetNodeModules -Destination $quarantineNodeModules -Force
+        }
+
+        # 2. Activate from verified staged runtime directory
+        try {
+            $stagedDist = Join-Path $StagedRuntimeDir "dist"
+            $stagedNodeModules = Join-Path $StagedRuntimeDir "node_modules"
+
+            if (Test-Path -LiteralPath $stagedDist) {
+                Write-InfoLog "Activating staged dist to: $targetDist..."
+                Move-Item -LiteralPath $stagedDist -Destination $targetDist -Force
+            }
+            if (Test-Path -LiteralPath $stagedNodeModules) {
+                Write-InfoLog "Activating staged node_modules to: $targetNodeModules..."
+                Move-Item -LiteralPath $stagedNodeModules -Destination $targetNodeModules -Force
+            }
+        } catch {
+            Write-FailureLog "Failed to activate staged runtime! Restoring quarantine immediately..."
+            if ($hadDist -and (Test-Path -LiteralPath $quarantineDist)) {
+                if (Test-Path -LiteralPath $targetDist) { Remove-Item -LiteralPath $targetDist -Recurse -Force -ErrorAction SilentlyContinue }
+                Move-Item -LiteralPath $quarantineDist -Destination $targetDist -Force
+            }
+            if ($hadNodeModules -and (Test-Path -LiteralPath $quarantineNodeModules)) {
+                if (Test-Path -LiteralPath $targetNodeModules) { Remove-Item -LiteralPath $targetNodeModules -Recurse -Force -ErrorAction SilentlyContinue }
+                Move-Item -LiteralPath $quarantineNodeModules -Destination $targetNodeModules -Force
+            }
+            throw "Runtime activation failed: $_"
+        }
+
+        # 3. Success -> remove quarantine
+        if ($hadDist -and (Test-Path -LiteralPath $quarantineDist)) {
+            Remove-Item -LiteralPath $quarantineDist -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        if ($hadNodeModules -and (Test-Path -LiteralPath $quarantineNodeModules)) {
+            Remove-Item -LiteralPath $quarantineNodeModules -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        Write-SuccessLog "Guarded runtime deployment to $TargetDir completed successfully."
+    } catch {
+        throw
+    }
+}
+
+function Compute-DirectoryFingerprint {
+    param(
+        [Parameter(Mandatory = $true)][string]$DirPath,
+        [switch]$IncludeFileMap = $false
+    )
+
+    if (-not (Test-Path -LiteralPath $DirPath)) {
+        return [PSCustomObject]@{
+            TotalFiles  = 0
+            TotalBytes  = [int64]0
+            Fingerprint = $null
+            Files       = @()
+        }
+    }
+
+    $resolvedDir = (Resolve-Path -LiteralPath $DirPath).Path.TrimEnd('\', '/')
+    $allFiles = [System.IO.Directory]::GetFiles($resolvedDir, "*", [System.IO.SearchOption]::AllDirectories)
+    $pathList = [System.Collections.Generic.List[string]]::new($allFiles.Length)
+    $lineList = [System.Collections.Generic.List[string]]::new($allFiles.Length)
+    $hasher = [System.Security.Cryptography.SHA256]::Create()
+    $totalBytes = [int64]0
+    $prefixLen = $resolvedDir.Length
+
+    foreach ($filePath in $allFiles) {
+        $relPath = $filePath.Substring($prefixLen).TrimStart('\', '/').Replace('\', '/')
+        $stream = [System.IO.File]::OpenRead($filePath)
+        try {
+            $len = $stream.Length
+            $totalBytes += $len
+            $hBytes = $hasher.ComputeHash($stream)
+            $sha = [System.BitConverter]::ToString($hBytes).Replace("-", "").ToLowerInvariant()
+        } finally {
+            $stream.Close()
+        }
+
+        $pathList.Add($relPath)
+        $lineList.Add("$relPath|$len|$sha")
+    }
+
+    # Sort deterministically by relative path using Ordinal character comparison in native .NET Array::Sort
+    $pArr = $pathList.ToArray()
+    $lArr = $lineList.ToArray()
+    [System.Array]::Sort($pArr, $lArr, [System.StringComparer]::Ordinal)
+
+    $aggregateStream = [System.IO.MemoryStream]::new()
+    $writer = [System.IO.StreamWriter]::new($aggregateStream, [System.Text.UTF8Encoding]::new($false))
+    foreach ($line in $lArr) {
+        $writer.WriteLine($line)
+    }
+    $writer.Flush()
+    $aggregateStream.Position = 0
+    $aggHashBytes = $hasher.ComputeHash($aggregateStream)
+    $aggregateFingerprint = [System.BitConverter]::ToString($aggHashBytes).Replace("-", "").ToLowerInvariant()
+    $writer.Dispose()
+    $aggregateStream.Dispose()
+    $hasher.Dispose()
+
+    $fileMap = if ($IncludeFileMap) {
+        $entries = [System.Collections.Generic.List[PSCustomObject]]::new()
+        foreach ($line in $lArr) {
+            $parts = $line.Split('|')
+            $entries.Add([PSCustomObject]@{
+                Path   = $parts[0]
+                Size   = [int64]$parts[1]
+                SHA256 = $parts[2]
+            })
+        }
+        $entries
+    } else {
+        @()
+    }
+
+    return [PSCustomObject]@{
+        TotalFiles  = $lArr.Length
+        TotalBytes  = $totalBytes
+        Fingerprint = $aggregateFingerprint
+        Files       = $fileMap
+    }
+}
+
+function Calculate-RequiredFreeDiskSpace {
+    param(
+        [Parameter(Mandatory = $true)][string]$TargetDir,
+        [int64]$CandidateRuntimeBytes = 0,
+        [string]$CandidateServerRuntimeDir = "",
+        [int64]$DbDumpAllowanceBytes = 0,
+        [int64]$DbDumpAllowanceMB = 500,
+        [int64]$SafetyReserveBytes = 0,
+        [int64]$SafetyReserveMB = 1024,
+        [int64]$FloorRequiredMB = 2048,
+        [int64]$FloorMB = 0
+    )
+
+    $effectiveFloorMB = if ($FloorMB -gt 0) { $FloorMB } else { $FloorRequiredMB }
+    $effectiveSafetyMB = if ($SafetyReserveBytes -gt 0) { [int64][Math]::Round($SafetyReserveBytes / 1MB) } else { $SafetyReserveMB }
+    $effectiveDbDumpMB = if ($DbDumpAllowanceBytes -gt 0) { [int64][Math]::Round($DbDumpAllowanceBytes / 1MB) } else { $DbDumpAllowanceMB }
+
+    # If CandidateServerRuntimeDir was provided and CandidateRuntimeBytes is 0, compute size
+    if (-not [string]::IsNullOrWhiteSpace($CandidateServerRuntimeDir) -and $CandidateRuntimeBytes -eq 0 -and (Test-Path -LiteralPath $CandidateServerRuntimeDir)) {
+        $metaPath = if (Test-Path -LiteralPath (Join-Path $CandidateServerRuntimeDir "runtime-metadata.json")) {
+            Join-Path $CandidateServerRuntimeDir "runtime-metadata.json"
+        } elseif (Test-Path -LiteralPath (Join-Path $CandidateServerRuntimeDir "payload\runtime-metadata.json")) {
+            Join-Path $CandidateServerRuntimeDir "payload\runtime-metadata.json"
+        } elseif (Test-Path -LiteralPath (Join-Path $CandidateServerRuntimeDir "server-runtime\runtime-metadata.json")) {
+            Join-Path $CandidateServerRuntimeDir "server-runtime\runtime-metadata.json"
+        } else {
+            $null
+        }
+        if ($metaPath -and (Test-Path -LiteralPath $metaPath)) {
+            try {
+                $candMeta = Get-Content -LiteralPath $metaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                $CandidateRuntimeBytes = [int64]$candMeta.runtimeTotalBytes
+            } catch {}
+        }
+        if ($CandidateRuntimeBytes -eq 0) {
+            $candFiles = [System.IO.Directory]::GetFiles($CandidateServerRuntimeDir, "*", [System.IO.SearchOption]::AllDirectories)
+            foreach ($cf in $candFiles) {
+                $s = [System.IO.File]::OpenRead($cf)
+                $CandidateRuntimeBytes += $s.Length
+                $s.Close()
+            }
+        }
+    }
+
+    $resolvedTarget = if (Test-Path -LiteralPath $TargetDir) {
+        (Resolve-Path -LiteralPath $TargetDir).Path
+    } else {
+        $TargetDir
+    }
+
+    $targetPathRoot = [System.IO.Path]::GetPathRoot($resolvedTarget)
+    $driveInfo = [System.IO.DriveInfo]::new($targetPathRoot)
+    $availableBytes = $driveInfo.AvailableFreeSpace
+
+    # Compute old runtime size if node_modules exists in target
+    $oldRuntimeDir = Join-Path $resolvedTarget "node_modules"
+    $oldRuntimeBytes = [int64]0
+    if (Test-Path -LiteralPath $oldRuntimeDir) {
+        $files = [System.IO.Directory]::GetFiles($oldRuntimeDir, "*", [System.IO.SearchOption]::AllDirectories)
+        foreach ($f in $files) {
+            $s = [System.IO.File]::OpenRead($f)
+            $oldRuntimeBytes += $s.Length
+            $s.Close()
+        }
+    }
+
+    # Compute old dist size if present
+    $oldDistDir = Join-Path $resolvedTarget "dist"
+    $oldDistBytes = [int64]0
+    if (Test-Path -LiteralPath $oldDistDir) {
+        $files = [System.IO.Directory]::GetFiles($oldDistDir, "*", [System.IO.SearchOption]::AllDirectories)
+        foreach ($f in $files) {
+            $s = [System.IO.File]::OpenRead($f)
+            $oldDistBytes += $s.Length
+            $s.Close()
+        }
+    }
+
+    $dbDumpBytes = $effectiveDbDumpMB * 1024 * 1024
+    $safetyBytes = $effectiveSafetyMB * 1024 * 1024
+    $calculatedRequiredBytes = $oldRuntimeBytes + $oldDistBytes + $CandidateRuntimeBytes + $dbDumpBytes + $safetyBytes
+    $floorRequiredBytes = [int64]$effectiveFloorMB * 1024 * 1024
+    $finalRequiredBytes = [Math]::Max($calculatedRequiredBytes, $floorRequiredBytes)
+
+    $hasSufficient = ($availableBytes -ge $finalRequiredBytes)
+
+    $breakdownObj = [PSCustomObject]@{
+        OldRuntimeMB       = [Math]::Round(($oldRuntimeBytes / 1MB), 2)
+        CandidateRuntimeMB = [Math]::Round(($CandidateRuntimeBytes / 1MB), 2)
+        FloorMB            = $effectiveFloorMB
+        SafetyReserveMB    = $effectiveSafetyMB
+        DbDumpAllowanceMB  = $effectiveDbDumpMB
+    }
+
+    return [PSCustomObject]@{
+        TargetDrive          = $targetPathRoot
+        AvailableBytes       = $availableBytes
+        AvailableMB          = [Math]::Round(($availableBytes / 1MB), 2)
+        RequiredBytes        = $finalRequiredBytes
+        RequiredMB           = [Math]::Round(($finalRequiredBytes / 1MB), 2)
+        CalculatedRequiredMB = [Math]::Round(($calculatedRequiredBytes / 1MB), 2)
+        OldRuntimeMB         = [Math]::Round(($oldRuntimeBytes / 1MB), 2)
+        CandidateRuntimeMB   = [Math]::Round(($CandidateRuntimeBytes / 1MB), 2)
+        HasSufficientSpace   = $hasSufficient
+        Breakdown            = $breakdownObj
+    }
+}
+
+function Deploy-DirectoryGuarded {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceDir,
+        [Parameter(Mandatory = $true)][string]$TargetDir,
+        [string]$StagingParentDir = "",
+        [string]$ExpectedFingerprint = ""
+    )
+
+    if (-not (Test-Path -LiteralPath $SourceDir)) {
+        throw "Source directory does not exist: $SourceDir"
+    }
+
+    $parentDir = if ($StagingParentDir -and (Test-Path -LiteralPath $StagingParentDir)) {
+        $StagingParentDir
+    } else {
+        Split-Path -Parent $TargetDir
+    }
+
+    if (-not (Test-Path -LiteralPath $parentDir)) {
+        New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
+    }
+
+    $runId = [Guid]::NewGuid().ToString("N")
+    $stageDir = Join-Path $parentDir ".staging_$runId"
+    $quarantineDir = Join-Path $parentDir ".quarantine_$runId"
+
+    try {
+        # 1. Stage candidate directory completely on target volume
+        Write-InfoLog "Staging candidate directory under: $stageDir..."
+        Copy-DirectorySafely -SourceDir $SourceDir -DestinationDir $stageDir
+
+        # 2. If expected fingerprint provided, verify staged directory
+        if ($ExpectedFingerprint) {
+            $stagedFp = (Compute-DirectoryFingerprint -DirPath $stageDir).Fingerprint
+            if ($stagedFp -ne $ExpectedFingerprint) {
+                throw "Staged directory fingerprint mismatch! Expected: $ExpectedFingerprint, Staged: $stagedFp"
+            }
+            Write-SuccessLog "Staged directory fingerprint verified successfully ($stagedFp)."
+        }
+
+        # 3. If target exists, move to quarantine on same volume
+        $hadTarget = Test-Path -LiteralPath $TargetDir
+        if ($hadTarget) {
+            Write-InfoLog "Moving current target directory to quarantine: $quarantineDir..."
+            Move-Item -LiteralPath $TargetDir -Destination $quarantineDir -Force
+        }
+
+        # 4. Activate staged candidate directory
+        try {
+            Write-InfoLog "Activating staged candidate directory to: $TargetDir..."
+            Move-Item -LiteralPath $stageDir -Destination $TargetDir -Force
+        } catch {
+            Write-FailureLog "Failed to activate staged directory! Restoring quarantine..."
+            if ($hadTarget -and (Test-Path -LiteralPath $quarantineDir)) {
+                Move-Item -LiteralPath $quarantineDir -Destination $TargetDir -Force
+            }
+            throw "Activation failed: $_"
+        }
+
+        # 5. Success -> cleanup quarantine
+        if ($hadTarget -and (Test-Path -LiteralPath $quarantineDir)) {
+            Remove-Item -LiteralPath $quarantineDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        Write-SuccessLog "Guarded directory deployment to $TargetDir completed successfully."
+    } finally {
+        if (Test-Path -LiteralPath $stageDir) {
+            Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Restore-DirectoryGuarded {
+    param(
+        [Parameter(Mandatory = $true)][string]$BackupDir,
+        [Parameter(Mandatory = $true)][string]$TargetDir,
+        [string]$ExpectedFingerprint = ""
+    )
+
+    if (-not (Test-Path -LiteralPath $BackupDir)) {
+        throw "Backup directory does not exist: $BackupDir"
+    }
+
+    Deploy-DirectoryGuarded -SourceDir $BackupDir -TargetDir $TargetDir -ExpectedFingerprint $ExpectedFingerprint
 }
 
 function Swap-DirectoryExact {
@@ -676,24 +1043,71 @@ function Compare-DeployedPayloadExact {
     $differences = [System.Collections.Generic.List[string]]::new()
 
     # Define explicit deployment mappings: source subpath -> target subpath
-    # 1. dist -> dist (Whole directory sync)
+    # 1. dist -> dist (from server-runtime/dist or dist)
     # 2. frontend/dist -> frontend/dist (Whole directory sync)
     # 3. prisma/schema.prisma -> prisma/schema.prisma (File)
     # 4. prisma/migrations -> prisma/migrations (Whole directory sync)
-    # 5. prisma-runtime -> node_modules/.prisma & node_modules/@prisma (or payload location)
+    # 5. server-runtime/node_modules -> node_modules (Full runtime fingerprint match)
+
+    # Full server-runtime fingerprint check if runtime-metadata.json is present
+    $candRuntimeMetaPath = if (Test-Path -LiteralPath (Join-Path $PayloadDir "runtime-metadata.json")) {
+        Join-Path $PayloadDir "runtime-metadata.json"
+    } else {
+        Join-Path $PayloadDir "server-runtime\runtime-metadata.json"
+    }
+    $candMeta = $null
+    if (Test-Path -LiteralPath $candRuntimeMetaPath) {
+        try {
+            $candMeta = Get-Content -LiteralPath $candRuntimeMetaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $targetNodeModules = Join-Path $TargetDir "node_modules"
+            if (-not (Test-Path -LiteralPath $targetNodeModules)) {
+                $differences.Add("Target node_modules missing completely.")
+            } else {
+                $targetFp = (Compute-DirectoryFingerprint -DirPath $targetNodeModules).Fingerprint
+                if ($targetFp -ne $candMeta.runtimeFingerprint) {
+                    $differences.Add("Target runtime fingerprint mismatch (Target=$targetFp, Candidate=$($candMeta.runtimeFingerprint))")
+                }
+            }
+        } catch {
+            $differences.Add("Failed to evaluate candidate runtime metadata: $_")
+        }
+    }
+
+    $candDistDir = if (Test-Path -LiteralPath (Join-Path $PayloadDir "server-runtime\dist")) {
+        Join-Path $PayloadDir "server-runtime\dist"
+    } elseif (Test-Path -LiteralPath (Join-Path $PayloadDir "dist")) {
+        Join-Path $PayloadDir "dist"
+    } else {
+        $null
+    }
 
     $directoryMappings = [System.Collections.Generic.List[hashtable]]::new()
-    $directoryMappings.Add(@{ Source = (Join-Path $PayloadDir "dist"); Target = (Join-Path $TargetDir "dist"); Name = "dist" })
+    if ($candDistDir -and (Test-Path -LiteralPath $candDistDir)) {
+        $directoryMappings.Add(@{ Source = $candDistDir; Target = (Join-Path $TargetDir "dist"); Name = "dist" })
+    } elseif ($candMeta -and $candMeta.distFingerprint) {
+        $targetDistDir = Join-Path $TargetDir "dist"
+        if (-not (Test-Path -LiteralPath $targetDistDir)) {
+            $differences.Add("Target dist missing completely.")
+        } else {
+            $targetDistFp = (Compute-DirectoryFingerprint -DirPath $targetDistDir).Fingerprint
+            if ($targetDistFp -ne $candMeta.distFingerprint) {
+                $differences.Add("Target dist fingerprint mismatch (Target=$targetDistFp, Candidate=$($candMeta.distFingerprint))")
+            }
+        }
+    }
+
     $directoryMappings.Add(@{ Source = (Join-Path $PayloadDir "frontend\dist"); Target = (Join-Path $TargetDir "frontend\dist"); Name = "frontend/dist" })
     $directoryMappings.Add(@{ Source = (Join-Path $PayloadDir "prisma\migrations"); Target = (Join-Path $TargetDir "prisma\migrations"); Name = "prisma/migrations" })
 
-    # Managed Prisma runtime subtrees (RR6-01)
-    $managedSubtrees = @("prisma", "@prisma", ".prisma")
-    foreach ($sub in $managedSubtrees) {
-        $sSub = Join-Path $PayloadDir "prisma-runtime\node_modules\$sub"
-        $tSub = Join-Path $TargetDir "node_modules\$sub"
-        if (Test-Path -LiteralPath $sSub) {
-            $directoryMappings.Add(@{ Source = $sSub; Target = $tSub; Name = "runtime/$sub" })
+    if (-not $candMeta) {
+        # Legacy fallback if testing older package layout
+        $managedSubtrees = @("prisma", "@prisma", ".prisma")
+        foreach ($sub in $managedSubtrees) {
+            $sSub = Join-Path $PayloadDir "prisma-runtime\node_modules\$sub"
+            $tSub = Join-Path $TargetDir "node_modules\$sub"
+            if (Test-Path -LiteralPath $sSub) {
+                $directoryMappings.Add(@{ Source = $sSub; Target = $tSub; Name = "runtime/$sub" })
+            }
         }
     }
 
@@ -750,7 +1164,11 @@ function Compare-DeployedPayloadExact {
     }
 
     # Check candidate Prisma runtime CLI
-    $sRuntimeCli = Join-Path $PayloadDir "prisma-runtime\node_modules\prisma\build\index.js"
+    $sRuntimeCli = if (Test-Path -LiteralPath (Join-Path $PayloadDir "server-runtime\node_modules\prisma\build\index.js")) {
+        Join-Path $PayloadDir "server-runtime\node_modules\prisma\build\index.js"
+    } else {
+        Join-Path $PayloadDir "prisma-runtime\node_modules\prisma\build\index.js"
+    }
     if (Test-Path -LiteralPath $sRuntimeCli) {
         $sRuntimeHash = Calculate-FileSHA256 $sRuntimeCli
         # Check if runtime deployed in target node_modules or runtime path

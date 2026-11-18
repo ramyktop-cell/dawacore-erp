@@ -22,14 +22,20 @@
   "minPowerShellVersion": "5.1",
   "requiredPermissions": "Administrator",
   "requiredPreflightFreeDiskMB": 2048,
+  "requiredSystemBrowser": ["Google Chrome", "Microsoft Edge"],
   "defaultTargetDirectory": "C:\\DawaCore",
   "preservedFiles": [
     ".env",
     "license.key",
     "uploads",
     "backups",
-    "prerequisites",
-    "node_modules"
+    "prerequisites"
+  ],
+  "managedDirectories": [
+    "dist",
+    "node_modules",
+    "frontend/dist",
+    "prisma"
   ],
   "candidateMigrations": [
     "20260907000000_init_inventory_core",
