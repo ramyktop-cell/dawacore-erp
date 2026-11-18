@@ -1,51 +1,55 @@
 # REVIEW_REPORT
 
-Decision: CHANGES_REQUESTED_LEVEL_C_PACKAGE_CLOSURE
-Task ID: 20261116-madarcore-offline-upgrade-repair
-Review cycle: 11
-Reviewed implementation commit: `eec68bf8be5ff713009bf6554b79c3d4ca168fb9`
-Reviewed reporting commit: `50fa74378fef8eb94541cb8c1e6e992ae07ec937`
+Decision: FAIL_REPAIR_REQUIRED
+Task ID: 20261117-madarcore-self-contained-runtime-upgrade
+Plan revision reviewed: 2
+Review date: 2026-11-18
 Reviewer: Codex
-Review date: 2026-11-17
-Client deployment: NOT_DEPLOYED
+Rejected handoff state: `READY_FOR_CODEX_LEVEL_C_RETEST_SELF_CONTAINED_RUNTIME`
+
+## Verified positives
+
+- Replacement ZIP SHA-256 is `b646f4731b2767bd076c8a76e69a3db9b684dc18cdc64f11ca20d81896799f72` and matches its `.sha256` file.
+- Runtime metadata records supported Node `v20.20.2` and the expected runtime statistics.
+- The payload is packaged as `server-runtime.zip`; the outer manifest/file-count performance problem was materially reduced.
+- Focused FT-12 exits 0 and prints PASS, but that PASS is invalid for the reason below.
+
+## Blocking findings
+
+### R3-01 — P0 — Verified staged runtime is deleted before production deployment
+
+`apply-madarcore-upgrade.ps1` extracts and verifies the candidate runtime during Phase 3, then its Phase-3 `finally` block unconditionally removes `$stagedRuntimeDir`. Phase 4 subsequently invokes the production Prisma CLI and `Deploy-VerifiedRuntimeGuarded` using paths under that deleted directory.
+
+Independent reproduction preserved the FT-12 lab and read the actual report:
+
+```text
+result: ROLLBACK_SUCCESS
+stateMachine: ROLLBACK_SUCCESS
+acceptance: SUCCESS
+deployment: IN_PROGRESS
+health: NOT_STARTED
+error: Staged runtime directory does not exist: ...\.staging_runtime_<guid>
+deploymentMs: 0
+```
+
+Therefore the current artifact cannot deploy successfully. Level C would fail before the intended post-swap health boundary.
+
+### R3-02 — P0 — FT-12 reports a false PASS without proving a post-swap failure
+
+FT-12 accepts any `ROLLBACK_SUCCESS` plus restored baseline markers. It does not assert that files were swapped, the candidate became active, or the rollback trigger occurred in health/post-deployment verification. Because R3-01 causes a pre-swap failure, FT-12 still passes and its message incorrectly states that rollback occurred after swap.
+
+### R3-03 — P1 — Build and test scripts contain a workstation-specific Node path
+
+Both `tools/build-madarcore-client-upgrade.ps1` and `tools/test-madarcore-client-upgrade.ps1` hard-code `E:\NODS JS20.2`. This makes the tooling non-portable and can silently select a machine-specific executable. Supported Node enforcement is required, but the path must be supplied explicitly or discovered deterministically rather than committed as a local drive constant.
+
+### R3-04 — P1 — Handoff hygiene is incomplete
+
+- `git diff --check` fails on trailing whitespace in `IMPLEMENTATION_REPORT.md` and `tools/test-madarcore-client-upgrade.ps1`.
+- No implementation/reporting commits exist for Revision 2; all implementation remains uncommitted.
+- Workflow documents still show the prior active/fail state, so the report status alone cannot transition the task.
 
 ## Decision
 
-Level C did not pass. The exact ZIP must not be sent to a client. The run reached real PostgreSQL 16.15 acceptance and failed before deployment because the extracted package cannot resolve `bcryptjs` from `payload/tools/acceptance-upgrade.cjs`.
+Do not run PostgreSQL Level C and do not send the ZIP to a client. The ZIP with SHA-256 `b646f4731b2767bd076c8a76e69a3db9b684dc18cdc64f11ca20d81896799f72` is `REJECTED_NOT_DEPLOYABLE`.
 
-## Exact artifact and isolated lab
-
-- ZIP: `installer_package/Output/MadarCore-Client-Upgrade-20261116.zip`
-- SHA-256: `a33724825937f197cecb32da5f4046091a99266b85a28ef0ae82492b545d0052`
-- Manifest verification after independent extraction: 1377/1377 files matched, 0 failures.
-- PostgreSQL: 16.15 on isolated localhost port 55432.
-- Cycle 10 database clone: `madarcore_levelc_c10`.
-- Target clone: `E:\MadarCore_Upgrade_Lab_C10\Target`.
-- Baseline: 6 applied migrations, 7 pending migrations, 37 public tables.
-
-## Real Level C results
-
-1. Preflight: PASS. Node 20.20.2 and PostgreSQL tools 16.15 were discovered; migration audit reported 6 applied and 7 pending.
-2. Backup: PASS. A custom-format dump was created and verified with `pg_restore --list`; dump SHA-256 was `53c1096bfe0e44cc0ad864f77d0b08ac2d98141cc2fdf59f926762ddd7818ab2` and size was 303895 bytes.
-3. Restore drill: PASS. The dump restored into an isolated acceptance database and table counts matched.
-4. Candidate migrations on the temporary database: PASS. All 7 pending migrations applied.
-5. Acceptance: FAIL. Node reported `Cannot find module 'bcryptjs'` from the extracted `payload/tools/acceptance-upgrade.cjs`.
-6. Deployment: NOT_STARTED.
-7. Post-deploy health: NOT_STARTED.
-8. Standalone rollback: NOT_REACHED. Therefore LC-05..LC-08 are not yet fully proven on the exact ZIP.
-
-## Safety verification after failure
-
-- Target application tree hash matched the baseline.
-- The stale baseline marker hash matched.
-- Target database remained at 6 migrations and 37 tables.
-- Schema-only dumps matched after excluding PostgreSQL 16 random `\\restrict`/`\\unrestrict` tokens.
-- The failed run's temporary acceptance database was cleaned. The separately pre-existing `dawacore_upgrade_accept_levelc_debug` database was not created or modified by this run.
-
-## Root cause
-
-`tools/build-madarcore-client-upgrade.ps1` copies the acceptance script and the Prisma runtime closure, but does not copy `bcryptjs`. Earlier runs from `E:\DawaCore\installer_package\Output\...` accidentally resolved `bcryptjs` from the repository parent `E:\DawaCore\node_modules`. Independent ZIP extraction removes that accidental parent dependency and exposes the packaging defect.
-
-## Gate
-
-Status is CHANGES_REQUESTED. A new ZIP requires the minimal LC-09 repair in `REPAIR_REQUEST.md`, all Level A/B gates, and a fresh Codex Level C run through successful apply, acceptance, health and exact rollback.
+Antigravity may perform only the corrections in the active `REPAIR_REQUEST.md`. Codex will first re-run the strengthened focused FT-12 and inspect its preserved report; Level A/B and Level C remain blocked until that gate is genuine.

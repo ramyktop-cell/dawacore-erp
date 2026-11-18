@@ -1,60 +1,87 @@
 # REPAIR_REQUEST
 
-Status: CHANGES_REQUESTED_LEVEL_C_PACKAGE_CLOSURE
-Task ID: 20261116-madarcore-offline-upgrade-repair
-Repair cycle: 11
-Owner: Codex
-Source review: `REVIEW_REPORT.md`
+Status: ACTIVE
+Task ID: 20261117-madarcore-self-contained-runtime-upgrade
+Plan revision: 2
+Repair set: R3-01..R3-04
 
-## LC-09 / Blocker — acceptance runtime dependency missing from the real ZIP
+## R3-01 — P0 — Preserve verified staging through deployment
 
-### Reproduction
+### Files
 
-1. Extract ZIP SHA-256 `a33724825937f197cecb32da5f4046091a99266b85a28ef0ae82492b545d0052` outside `E:\DawaCore`.
-2. Run the real upgrade against an isolated PostgreSQL 16.15 target.
-3. Preflight, backup, restore drill and candidate migrations pass.
-4. Acceptance fails with `Cannot find module 'bcryptjs'` from `payload/tools/acceptance-upgrade.cjs`.
+- `installer_package/madarcore-client-upgrade/apply-madarcore-upgrade.ps1`
 
-### Required minimal repair
+### Required minimal correction
 
-1. In `tools/build-madarcore-client-upgrade.ps1`, copy only the required production package `node_modules/bcryptjs` into `payload/tools/node_modules/bcryptjs` while building the package. Fail the build clearly if its `package.json` or CommonJS entry `umd/index.js` is absent.
-2. Do not copy the repository's complete `node_modules` and do not rely on `NODE_PATH`, the current working directory, or a parent repository installation.
-3. In `tools/verify-madarcore-client-upgrade.cjs`, require the packaged `payload/tools/node_modules/bcryptjs/package.json` and `umd/index.js` and add an isolated-extraction check. Anchor module resolution at the extracted `payload/tools/acceptance-upgrade.cjs` with `module.createRequire`; require `bcryptjs`, execute a small hash/compare smoke test, and assert the resolved path is contained in the extracted package.
-4. In `tools/test-madarcore-client-upgrade.ps1`, add one explicit regression test that extracts/copies the built artifact under the independent `%TEMP%` lab root and proves anchored `require('bcryptjs')` works there without repository parent modules. The test must fail against the current ZIP.
-5. Rebuild manifest and ZIP, then verify every extracted manifest hash and the external `.sha256` file.
-6. Do not change acceptance business scenarios, application code, database schema, migrations, permissions, or the apply/rollback behavior for this repair.
+1. Do not delete the verified `$stagedRuntimeDir` after successful temporary-database acceptance.
+2. Keep it alive through production migration, guarded activation, package metadata copy, post-deploy health/branding, and any automatic rollback invocation.
+3. Clean it on acceptance failure/cancellation and in one final deployment-scope cleanup path after success or controlled failure.
+4. Never delete a quarantine/backup required for manual recovery.
+5. Before stopping production or running production migrations, assert that the staged Prisma CLI, `dist`, `node_modules`, `package.json`, and `package-lock.json` still exist.
+6. Record the rollback trigger phase and the last successful pre-rollback state in the report without overwriting that evidence when the terminal result becomes `ROLLBACK_SUCCESS`.
 
-## Allowed files
+## R3-02 — P0 — Make FT-12 prove the intended post-swap boundary
+
+### Files
+
+- `tools/test-madarcore-client-upgrade.ps1`
+
+### Required minimal correction
+
+FT-12 must fail unless all of the following are true:
+
+1. Production migration succeeded.
+2. Runtime/application activation occurred (`FILES_SWAPPED` or an equivalent preserved last-successful-state field).
+3. The rollback trigger phase is post-deployment health/branding, not missing staging, missing Prisma, or another pre-swap failure.
+4. The recorded error matches the deliberate health failure and does not contain `Staged runtime directory does not exist`.
+5. Automatic rollback restored baseline `dist`, the stale marker, the exact old runtime fingerprint/marker, and removed candidate-only packages.
+6. No `.staging_runtime_*` or `.quarantine_*` path remains.
+
+Add a preserved report field such as `rollbackTriggerPhase` and `lastSuccessfulState`; do not infer post-swap execution only from the final `ROLLBACK_SUCCESS` value.
+
+Run focused FT-12 first. Preserve its lab/report during the implementation check and include the relevant report fields in `IMPLEMENTATION_REPORT.md`. If it fails, stop without running Level A/B.
+
+## R3-03 — P1 — Remove workstation-specific Node path
+
+### Files
 
 - `tools/build-madarcore-client-upgrade.ps1`
-- `tools/verify-madarcore-client-upgrade.cjs`
 - `tools/test-madarcore-client-upgrade.ps1`
+
+### Required minimal correction
+
+1. Remove committed references to `E:\NODS JS20.2` or any developer-specific absolute path.
+2. Add an optional explicit `-NodeExecutable` parameter and/or deterministic PATH discovery.
+3. Validate that the selected executable is Node 20.19+ or Node 22 before work begins.
+4. Ensure npm is executed using the same selected Node installation, not an unrelated global npm.
+5. Fail with a clear actionable message when no supported Node toolchain is supplied/found.
+6. The report may record the actual local path used for the build; source code may not hard-code it.
+
+## R3-04 — P1 — Restore handoff hygiene
+
+### Files
+
 - `IMPLEMENTATION_REPORT.md`
-- `REVIEW_REPORT.md`
-- `REPAIR_REQUEST.md`
-- `ANTIGRAVITY_HANDOFF.md`
-- generated package output under `installer_package/Output/`
+- whitespace-only cleanup in already allowed modified files
 
-## Forbidden files
+### Required minimal correction
 
-- `src/**`
-- `frontend/src/**`
-- `prisma/**`
-- `tools/acceptance-upgrade.cjs`
-- `installer_package/madarcore-client-upgrade/apply-madarcore-upgrade.ps1`
-- `installer_package/madarcore-client-upgrade/rollback-madarcore-upgrade.ps1`
-- authentication, authorization, expense, sales, purchase, inventory and accounting logic
+1. Make `git diff --check` exit 0.
+2. Update the report with the genuine focused FT-12 report evidence and exact timings.
+3. After all required gates pass, create the required implementation commit followed by the reporting commit.
+4. Do not add old untracked Cycle documents to either commit.
 
-## Required evidence before handoff
+## Allowed scope
 
-1. Actual diff limited to the allowed files.
-2. Build succeeds.
-3. Static verifier passes, including the independent extracted ZIP dependency-resolution check.
-4. FT matrix passes with the new package-closure regression test reported explicitly.
-5. Extracted ZIP manifest is 100% valid and ZIP SHA-256 matches its `.sha256` file.
-6. Show that `bcryptjs` resolves to a path inside the extracted ZIP, not `E:\DawaCore\node_modules`.
-7. Update `IMPLEMENTATION_REPORT.md` to `READY_FOR_CODEX_LEVEL_C_RETEST_PACKAGE_CLOSURE` and stop. Do not run PostgreSQL Level C or declare PASS.
+Only the four files named above, generated output, and the already-authorized reporting file may change. No changes to application source, frontend source, schema/migrations, package files, activation/licensing, cloud configuration, or client data.
 
-## Next Codex gate
+## Mandatory order
 
-Codex will create a fresh isolated target/database and rerun the exact ZIP through `preflight -> backup -> acceptance -> apply -> health -> standalone rollback`, then compare database and application baseline evidence.
+1. Implement R3-01 and R3-02.
+2. Run syntax checks.
+3. Run focused FT-12 and inspect its report fields. Stop on failure.
+4. Implement/verify R3-03 and whitespace cleanup.
+5. Rebuild the ZIP with an explicitly supplied supported Node executable.
+6. Run Level A once and full Level B once.
+7. Update the implementation report and create two commits.
+8. Stop for Codex review. Do not run Level C and do not send the package.
