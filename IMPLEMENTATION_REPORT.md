@@ -210,3 +210,33 @@ Antigravity has stopped editing and has not run PostgreSQL Level C or modified p
 
 **Next Action:** Awaiting Codex review and Level C testing.
 **State Transition Target:** `READY_FOR_CODEX_LEVEL_C_RETEST_SELF_CONTAINED_RUNTIME`
+
+---
+
+# Tenant isolation repair — 2026-11-22
+
+**Plan:** `work/TENANT_ISOLATION_IMPLEMENTATION_PLAN.md` (Codex)
+
+## Implemented scope
+
+1. Medicine identifiers are company-local: `barcode`, `code`, and `scalePlu` use compound company constraints; create/update checks and generated codes are company-scoped.
+2. Medicine catalogue operations now receive authenticated company context and scope list, categories, detail, create, update, delete, search, scan, POS lookup, top-selling/backfill, and bulk import.
+3. The invalid empty-period `SaleItem.groupBy({ by: ['medicineId'] })` fallback was removed. Empty daily-sales periods return the normal zero report.
+4. The already-authorized stock-count medicine-create call now supplies `stockCount.companyId`, solely to close compilation after `Medicine.companyId` became mandatory.
+5. The migration infers legacy ownership from a medicine's batch branches, permits the single-company unambiguous fallback, and aborts instead of silently assigning unresolved multi-company rows.
+
+## Verification evidence
+
+- `npx prisma validate`: **PASS**.
+- `npx tsc -p tsconfig.json --noEmit`: **PASS**.
+- `npx jest --runInBand src/medicines/medicines.service.spec.ts`: **21 passed, 0 failed**.
+- Direct isolated daily-sales test: **PASS**; zero summary and empty `topProducts`, with `groupBy` guarded to fail if called.
+- Fresh local PostgreSQL acceptance on `127.0.0.1:55432`: **PASS** for the same barcode in two companies, duplicate rejection inside one company, Company A catalogue excluding Company B, foreign detail returning not-found, and empty daily-sales report.
+- The temporary acceptance database `madarcore_tenant_repair_20261122` was removed after the successful run. No client or production database was touched.
+- The repository's daily-sales Jest suite remains affected by its pre-existing Nest ESM test-loader error (`@nestjs/testing`); the repaired service behavior was therefore verified directly and through real PostgreSQL acceptance.
+
+## Packaging note
+
+`prisma/migrations/20261122000000_isolate_medicines_per_company/migration.sql` is ignored by the repository's broad `*.sql` rule. It must be included explicitly (for example with `git add -f` during the reviewed commit); no `.gitignore` change was made.
+
+**Implementation state:** `READY_FOR_CODEX_REVIEW_TENANT_ISOLATION`

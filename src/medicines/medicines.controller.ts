@@ -43,14 +43,14 @@ export class MedicinesController {
       search,
       category,
       branchId: scopedBranchId,
-    });
+    }, actor);
   }
 
   @Get('categories')
   @Permission('medicines:read')
   @ApiOperation({ summary: 'جلب قائمة التصنيفات الدوائية المسجلة' })
-  async getCategories() {
-    return await this.medicinesService.getCategories();
+  async getCategories(@CurrentUser() actor: AuthenticatedUser) {
+    return await this.medicinesService.getCategories(actor);
   }
 
   @Get('search')
@@ -60,7 +60,7 @@ export class MedicinesController {
   @ApiQuery({ name: 'q', description: 'نص البحث', required: true })
   async search(@Query('q') q: string, @Query('branchId') branchId?: string, @CurrentUser() actor?: AuthenticatedUser) {
     const scopedBranchId = await this.medicinesService.resolveBranchScope(branchId, actor, true);
-    return await this.medicinesService.search(q, scopedBranchId);
+    return await this.medicinesService.search(q, scopedBranchId, actor.companyId);
   }
 
   @Get('scan')
@@ -88,7 +88,7 @@ export class MedicinesController {
   ) {
     const query = q || search || '';
     const scopedBranchId = await this.medicinesService.resolveBranchScope(branchId, actor, true);
-    return await this.medicinesService.findForPos(scopedBranchId, query);
+    return await this.medicinesService.findForPos(scopedBranchId, query, actor.companyId);
   }
 
   @Get('top-selling')
@@ -105,14 +105,14 @@ export class MedicinesController {
     const parsed = limit ? Number.parseInt(limit, 10) : 20;
     const take = Number.isFinite(parsed) ? Math.min(50, Math.max(1, parsed)) : 20;
     const scopedBranchId = await this.medicinesService.resolveBranchScope(branchId, actor, true);
-    return await this.medicinesService.getTopSelling(take, scopedBranchId);
+    return await this.medicinesService.getTopSelling(take, scopedBranchId, actor.companyId);
   }
 
   @Get(':id')
   @Permission('medicines:read')
   @ApiOperation({ summary: 'جلب تفاصيل دواء محدد مع وحداته وتشغيلاته' })
-  async findOne(@Param('id') id: string) {
-    return await this.medicinesService.findOne(id);
+  async findOne(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return await this.medicinesService.findOne(id, actor);
   }
 
   @Post()
@@ -127,8 +127,8 @@ export class MedicinesController {
   @Permission('medicines:write')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'استيراد جماعي للأصناف والأرصدة من Odoo أو Excel/CSV' })
-  async bulkImport(@Body() dto: BulkImportMedicinesDto) {
-    return await this.medicinesService.bulkImport(dto);
+  async bulkImport(@Body() dto: BulkImportMedicinesDto, @CurrentUser() actor: AuthenticatedUser) {
+    return await this.medicinesService.bulkImport(dto, actor);
   }
 
   @Put(':id')
@@ -141,7 +141,7 @@ export class MedicinesController {
   @Delete(':id')
   @Permission('medicines:write')
   @ApiOperation({ summary: 'حذف دواء بشرط عدم ارتباطه بحركات سابقة' })
-  async remove(@Param('id') id: string) {
-    return await this.medicinesService.remove(id);
+  async remove(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return await this.medicinesService.remove(id, actor);
   }
 }

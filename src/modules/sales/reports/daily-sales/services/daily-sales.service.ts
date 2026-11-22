@@ -300,38 +300,6 @@ export class DailySalesService extends BaseReportService<
       agg.totalSales += totalSales;
     }
 
-    // دعم fallback للـ groupBy إن لم تكن هناك أصناف من findMany (مثل اختبارات الوحدة)
-    if (
-      productAggMap.size === 0 &&
-      typeof (this.prisma.saleItem as any)?.groupBy === 'function'
-    ) {
-      const grouped = await (this.prisma.saleItem as any).groupBy({
-        by: ['medicineId'],
-        _sum: { quantity: true, totalPrice: true },
-      });
-      if (grouped && grouped.length > 0) {
-        const medIds = grouped.map((g: any) => g.medicineId).filter(Boolean);
-        const medicines =
-          typeof (this.prisma as any).medicine?.findMany === 'function'
-            ? await (this.prisma as any).medicine.findMany({
-                where: { id: { in: medIds } },
-              })
-            : [];
-        const medMap = new Map<string, string>(
-          medicines.map((m: any) => [String(m.id), String(m.tradeName)]),
-        );
-        for (const g of grouped) {
-          const tradeName = medMap.get(g.medicineId) || 'صنف غير معروف';
-          productAggMap.set(g.medicineId, {
-            medicineId: String(g.medicineId),
-            tradeName: String(tradeName),
-            totalQuantity: g._sum?.quantity || 0,
-            totalSales: Number(g._sum?.totalPrice) || 0,
-          });
-        }
-      }
-    }
-
     const topProducts: TopProductItem[] = Array.from(productAggMap.values())
       .sort((a, b) => b.totalSales - a.totalSales)
       .slice(0, 10)

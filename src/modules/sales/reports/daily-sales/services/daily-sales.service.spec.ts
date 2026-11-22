@@ -138,6 +138,7 @@ describe('DailySalesService', () => {
       expect(result.paymentBreakdown).toEqual([]);
       expect(result.cashierBreakdown).toEqual([]);
       expect(result.topProducts).toEqual([]);
+      expect(prisma.saleItem.groupBy).not.toHaveBeenCalled();
       expect(result.invoices).toEqual([]);
       expect(result.hourlyBreakdown).toHaveLength(24);
       expect(result.hourlyBreakdown.every((h) => h.invoicesCount === 0)).toBe(
@@ -336,13 +337,19 @@ describe('DailySalesService', () => {
   describe('top products', () => {
     it('should map medicine names correctly', async () => {
       prisma.sale.findMany.mockResolvedValue([mockSale()]);
-      prisma.saleItem.groupBy.mockResolvedValue([
-        { medicineId: MED_1_ID, _sum: { quantity: 10, totalPrice: 500 } },
-        { medicineId: MED_2_ID, _sum: { quantity: 5, totalPrice: 250 } },
-      ]);
-      prisma.medicine.findMany.mockResolvedValue([
-        { id: MED_1_ID, tradeName: 'بنادول' },
-        { id: MED_2_ID, tradeName: 'أوجمنتين' },
+      prisma.saleItem.findMany.mockResolvedValue([
+        {
+          totalBaseQty: 10,
+          returnedQty: 0,
+          totalPrice: 500,
+          batch: { medicineId: MED_1_ID, medicine: { id: MED_1_ID, tradeName: 'بنادول' } },
+        },
+        {
+          totalBaseQty: 5,
+          returnedQty: 0,
+          totalPrice: 250,
+          batch: { medicineId: MED_2_ID, medicine: { id: MED_2_ID, tradeName: 'أوجمنتين' } },
+        },
       ]);
 
       const result = await service.generate({}, COMPANY_ID, USER_ID);
@@ -358,10 +365,14 @@ describe('DailySalesService', () => {
 
     it('should handle missing medicine name gracefully', async () => {
       prisma.sale.findMany.mockResolvedValue([mockSale()]);
-      prisma.saleItem.groupBy.mockResolvedValue([
-        { medicineId: 'unknown-med', _sum: { quantity: 1, totalPrice: 100 } },
+      prisma.saleItem.findMany.mockResolvedValue([
+        {
+          totalBaseQty: 1,
+          returnedQty: 0,
+          totalPrice: 100,
+          batch: { medicineId: 'unknown-med', medicine: null },
+        },
       ]);
-      prisma.medicine.findMany.mockResolvedValue([]);
 
       const result = await service.generate({}, COMPANY_ID, USER_ID);
 

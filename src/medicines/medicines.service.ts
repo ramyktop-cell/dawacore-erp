@@ -62,11 +62,19 @@ export class MedicinesService {
     search?: string;
     category?: string;
     branchId?: string;
-  }) {
+  }, actor: AuthenticatedUser) {
     const { page = 1, limit = 20, search, category, branchId } = params;
     const skip = (page - 1) * limit;
+    const permittedBranchIds = branchId
+      ? [branchId]
+      : (await this.prisma.branch.findMany({
+          where: { companyId: actor.companyId },
+          select: { id: true },
+        })).map((branch) => branch.id);
 
-    const where: Prisma.MedicineWhereInput = {};
+    const where: Prisma.MedicineWhereInput = {
+      companyId: actor.companyId,
+    };
 
     if (category && category !== 'ALL') {
       where.category = category;
@@ -94,6 +102,7 @@ export class MedicinesService {
             orderBy: { multiplier: 'desc' },
           },
           batches: {
+            where: { branchId: { in: permittedBranchIds } },
             select: {
               quantityInBase: true,
               branchId: true,
@@ -167,11 +176,11 @@ export class MedicinesService {
   /**
    * جلب التصنيفات الدوائية المتاحة
    */
-  async getCategories(): Promise<string[]> {
+  async getCategories(actor: AuthenticatedUser): Promise<string[]> {
     const raw = await this.prisma.medicine.findMany({
       select: { category: true },
       distinct: ['category'],
-      where: { category: { not: '' } },
+      where: { companyId: actor.companyId, category: { not: '' } },
       orderBy: { category: 'asc' },
     });
     return raw.map((r) => r.category).filter(Boolean);
@@ -180,12 +189,17 @@ export class MedicinesService {
   /**
    * جلب دواء واحد بالتفصيل
    */
-  async findOne(id: string) {
-    const med = await this.prisma.medicine.findUnique({
-      where: { id },
+  async findOne(id: string, actor: AuthenticatedUser) {
+    const permittedBranchIds = (await this.prisma.branch.findMany({
+      where: { companyId: actor.companyId },
+      select: { id: true },
+    })).map((branch) => branch.id);
+    const med = await this.prisma.medicine.findFirst({
+      where: { id, companyId: actor.companyId },
       include: {
         units: { orderBy: { multiplier: 'desc' } },
         batches: {
+          where: { branchId: { in: permittedBranchIds } },
           orderBy: { expiryDate: 'asc' },
           select: {
             id: true,
@@ -280,13 +294,15 @@ export class MedicinesService {
     }
   }
 
-  async create(dto: CreateMedicineDto, actor?: AuthenticatedUser) {
+  async create(dto: CreateMedicineDto, actor: AuthenticatedUser) {
     await this.validateScientificName(dto.scientificName, actor);
     this.validateWeighed(dto);
-    if (dto.isWeighed && await this.prisma.medicine.findUnique({where:{scalePlu:dto.scalePlu}})) throw new BadRequestException('كود PLU مستخدم لصنف ميزان آخر');
+    if (dto.isWeighed && await this.prisma.medicine.findFirst({ where: { companyId: actor.companyId, scalePlu: dto.scalePlu } })) {
+      throw new BadRequestException('كود PLU مستخدم لصنف ميزان آخر');
+    }
     // التحقق من تكرار الباركود
-    const existingBarcode = await this.prisma.medicine.findUnique({
-      where: { barcode: dto.barcode.trim() },
+    const existingBarcode = await this.prisma.medicine.findFirst({
+      where: { companyId: actor.companyId, barcode: dto.barcode.trim() },
     });
     if (existingBarcode) {
       throw new BadRequestException(`الباركود (${dto.barcode}) مسجل مسبقاً لدواء: ${existingBarcode.tradeName}`);
@@ -295,12 +311,12 @@ export class MedicinesService {
     // توليد كود إن لم يوجد
     let code = dto.code?.trim();
     if (!code) {
-      const count = await this.prisma.medicine.count();
+      const count = await this.prisma.medicine.count({ where: { companyId: actor.companyId } });
       code = `MED-${String(count + 1).padStart(5, '0')}`;
     }
 
-    const existingCode = await this.prisma.medicine.findUnique({
-      where: { code },
+    const existingCode = await this.prisma.medicine.findFirst({
+      where: { companyId: actor.companyId, code },
     });
     if (existingCode) {
       code = `MED-${Date.now().toString().slice(-6)}`;
@@ -318,6 +334,7 @@ export class MedicinesService {
 
     const medicine = await this.prisma.medicine.create({
       data: {
+        companyId: actor.companyId,
         code,
         isWeighed: dto.isWeighed ?? false,
         scalePlu: dto.isWeighed ? dto.scalePlu : null,
@@ -369,25 +386,36 @@ export class MedicinesService {
   /**
    * تعديل بيانات دواء ووحداته
    */
-  async update(id: string, dto: UpdateMedicineDto, actor?: AuthenticatedUser) {
+  async update(id: string, dto: UpdateMedicineDto, actor: AuthenticatedUser) {
     if (dto.scientificName !== undefined) await this.validateScientificName(dto.scientificName, actor);
-    const existing = await this.prisma.medicine.findUnique({ where: { id } });
+    const existing = await this.prisma.medicine.findFirst({ where: { id, companyId: actor.companyId } });
     if (!existing) {
       throw new NotFoundException('الدواء غير موجود');
     }
 
-    if (dto.scalePlu) { const duplicate = await this.prisma.medicine.findUnique({where:{scalePlu:dto.scalePlu}}); if (duplicate && duplicate.id !== id) throw new BadRequestException('كود PLU مستخدم لصنف ميزان آخر'); }
+    if (dto.scalePlu) {
+      const duplicate = await this.prisma.medicine.findFirst({ where: { companyId: actor.companyId, scalePlu: dto.scalePlu } });
+      if (duplicate && duplicate.id !== id) throw new BadRequestException('كود PLU مستخدم لصنف ميزان آخر');
+    }
     const changingMeasure = dto.isWeighed !== undefined && dto.isWeighed !== existing.isWeighed;
     if (changingMeasure && (await this.prisma.batch.count({where:{medicineId:id}}) || await this.prisma.purchaseItem.count({where:{medicineId:id}}))) throw new BadRequestException('لا يمكن تحويل وحدة صنف له مخزون أو مشتريات؛ أنشئ صنف ميزان جديداً أو نفذ ترحيلاً مدققاً');
     const effectiveWeighed = dto.isWeighed ?? existing.isWeighed;
     this.validateWeighed({isWeighed:effectiveWeighed,scalePlu:dto.scalePlu ?? existing.scalePlu ?? undefined,units:dto.units || await this.prisma.medicineUnit.findMany({where:{medicineId:id}})});
     // فحص تكرار الباركود في حال تعديله
     if (dto.barcode && dto.barcode.trim() !== existing.barcode) {
-      const duplicate = await this.prisma.medicine.findUnique({
-        where: { barcode: dto.barcode.trim() },
+      const duplicate = await this.prisma.medicine.findFirst({
+        where: { companyId: actor.companyId, barcode: dto.barcode.trim() },
       });
       if (duplicate && duplicate.id !== id) {
         throw new BadRequestException('الباركود الجديد مسجل بالفعل لدواء آخر');
+      }
+    }
+    if (dto.code && dto.code.trim() !== existing.code) {
+      const duplicate = await this.prisma.medicine.findFirst({
+        where: { companyId: actor.companyId, code: dto.code.trim() },
+      });
+      if (duplicate && duplicate.id !== id) {
+        throw new BadRequestException('كود الصنف الجديد مسجل بالفعل لصنف آخر');
       }
     }
 
@@ -458,8 +486,8 @@ export class MedicinesService {
   /**
    * حذف صنف دوائي مع التحقق من عدم وجود حركات سابقة
    */
-  async remove(id: string) {
-    const existing = await this.prisma.medicine.findUnique({ where: { id } });
+  async remove(id: string, actor: AuthenticatedUser) {
+    const existing = await this.prisma.medicine.findFirst({ where: { id, companyId: actor.companyId } });
     if (!existing) {
       throw new NotFoundException('الدواء غير موجود');
     }
@@ -483,11 +511,12 @@ export class MedicinesService {
   /**
    * استعلام سريع بالبحث (للبحث الفوري بالاسم أو الباركود)
    */
-  async search(query: string, branchId?: string) {
+  async search(query: string, branchId: string | undefined, companyId: string) {
     if (!query || query.trim().length === 0) return [];
 
     const medicines = await this.prisma.medicine.findMany({
       where: {
+        companyId,
         OR: [
           { tradeName: { contains: query, mode: 'insensitive' } },
           { scientificName: { contains: query, mode: 'insensitive' } },
@@ -539,13 +568,13 @@ export class MedicinesService {
   /**
    * مطابقة الباركود الممسوح بدقة
    */
-  async scan(barcode: string, branchId?: string, companyId?: string) {
+  async scan(barcode: string, branchId: string | undefined, companyId: string) {
     if (!barcode) {
       throw new NotFoundException('الباركود مطلوب');
     }
 
     let medicine: any = await this.prisma.medicine.findFirst({
-      where: { barcode: barcode.trim() },
+      where: { companyId, barcode: barcode.trim() },
       include: {
         units: true,
         batches: {
@@ -557,7 +586,7 @@ export class MedicinesService {
 
     if (!medicine) {
       const unit = await this.prisma.medicineUnit.findFirst({
-        where: { barcode: barcode.trim() },
+        where: { barcode: barcode.trim(), medicine: { companyId } },
         include: {
           medicine: {
             include: {
@@ -581,13 +610,12 @@ export class MedicinesService {
     const cleanBarcode = barcode.trim();
 
     if (!medicine) {
-      if (!companyId && branchId) companyId = (await this.prisma.branch.findUnique({where:{id:branchId},select:{companyId:true}}))?.companyId;
       const setting = companyId ? await this.prisma.companySetting.findUnique({where:{companyId_key:{companyId,key:'scaleBarcodeConfig'}}}) : null;
       let parsed;
       try { parsed = parseScaleBarcodeValue(cleanBarcode,setting ? JSON.parse(setting.value) : {}); }
       catch(error) { throw new BadRequestException(error instanceof Error ? error.message : 'باركود ميزان غير صالح'); }
       if (parsed) {
-        medicine = await this.prisma.medicine.findUnique({where:{scalePlu:parsed.itemCode},include:{units:true,batches:{where:{isFrozen:false,...(branchId?{branchId}:{})},select:{quantityInBase:true,branchId:true}}}});
+        medicine = await this.prisma.medicine.findFirst({where:{companyId,scalePlu:parsed.itemCode},include:{units:true,batches:{where:{isFrozen:false,...(branchId?{branchId}:{})},select:{quantityInBase:true,branchId:true}}}});
         if (medicine?.isWeighed) {
           const unit=medicine.units.find((u:any)=>u.unitType==='UNIT' && u.multiplier===1000);
           if (!unit) throw new BadRequestException('وحدة كيلو الصنف غير صحيحة');
@@ -635,13 +663,14 @@ export class MedicinesService {
   /**
    * استعلام الأدوية للـ POS مع التشغيلات المتاحة مرتبة حسب FEFO
    */
-  async findForPos(branchId?: string, search?: string) {
+  async findForPos(branchId: string | undefined, search: string | undefined, companyId: string) {
     if (!search || search.trim().length === 0) return [];
 
     const branchCondition = branchId ? { branchId } : {};
 
     const medicines = await this.prisma.medicine.findMany({
       where: {
+        companyId,
         OR: [
           { tradeName: { contains: search, mode: 'insensitive' } },
           { scientificName: { contains: search, mode: 'insensitive' } },
@@ -704,7 +733,7 @@ export class MedicinesService {
   /**
    * جلب أكثر الأصناف مبيعاً (Top 20 Best Sellers) مع أرصدة المخزون والأسعار والوحدات
    */
-  async getTopSelling(limit: number = 20, branchId?: string) {
+  async getTopSelling(limit: number = 20, branchId: string | undefined, companyId: string) {
     const branchCondition = branchId ? { branchId } : {};
     const soldMap = new Map<string, number>();
 
@@ -753,7 +782,7 @@ export class MedicinesService {
 
     // جلب الأدوية الأكثر مبيعاً
     let medicines = await this.prisma.medicine.findMany({
-      where: targetMedIds.length > 0 ? { id: { in: targetMedIds } } : undefined,
+      where: targetMedIds.length > 0 ? { companyId, id: { in: targetMedIds } } : { companyId },
       include: {
         units: { orderBy: { multiplier: 'desc' } },
         batches: {
@@ -773,7 +802,7 @@ export class MedicinesService {
       const existingIds = medicines.map((m) => m.id);
       const remainingCount = limit - medicines.length;
       const additional = await this.prisma.medicine.findMany({
-        where: existingIds.length > 0 ? { id: { notIn: existingIds } } : undefined,
+        where: existingIds.length > 0 ? { companyId, id: { notIn: existingIds } } : { companyId },
         take: remainingCount,
         orderBy: { createdAt: 'desc' },
         include: {
@@ -857,7 +886,7 @@ export class MedicinesService {
   /**
    * استيراد جماعي للأصناف والأسعار والأرصدة الافتتاحية من Odoo أو Excel/CSV
    */
-  async bulkImport(dto: BulkImportMedicinesDto) {
+  async bulkImport(dto: BulkImportMedicinesDto, actor: AuthenticatedUser) {
     if (!dto.items || dto.items.length === 0) {
       throw new BadRequestException('قائمة الأصناف المراد استيرادها فارغة');
     }
@@ -865,8 +894,17 @@ export class MedicinesService {
     // تحديد الفرع الافتراضي لإنشاء التشغيلات الافتتاحية في حال وجود كميات
     let targetBranchId = dto.branchId;
     if (!targetBranchId) {
-      const firstBranch = await this.prisma.branch.findFirst({ orderBy: { createdAt: 'asc' } });
+      const firstBranch = await this.prisma.branch.findFirst({
+        where: { companyId: actor.companyId },
+        orderBy: { createdAt: 'asc' },
+      });
       targetBranchId = firstBranch?.id;
+    } else {
+      const branch = await this.prisma.branch.findFirst({
+        where: { id: targetBranchId, companyId: actor.companyId },
+        select: { id: true },
+      });
+      if (!branch) throw new NotFoundException('الفرع غير موجود');
     }
 
     let createdCount = 0;
@@ -896,6 +934,7 @@ export class MedicinesService {
         // التحقق مما إذا كان الصنف موجوداً مسبقاً بالباركود أو الكود أو الاسم التجاري
         const existing = await this.prisma.medicine.findFirst({
           where: {
+            companyId: actor.companyId,
             OR: [
               { barcode: cleanBarcode },
               { code: cleanCode },
@@ -912,6 +951,7 @@ export class MedicinesService {
           await this.prisma.medicine.update({
             where: { id: existing.id },
             data: {
+              companyId: actor.companyId,
               tradeName,
               scientificName,
               category,
@@ -931,6 +971,7 @@ export class MedicinesService {
         } else {
           const created = await this.prisma.medicine.create({
             data: {
+              companyId: actor.companyId,
               code: cleanCode,
               barcode: cleanBarcode,
               tradeName,
