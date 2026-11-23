@@ -14,8 +14,9 @@ export const LoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [activeField, setActiveField] = useState<'username' | 'password'>('username');
   const [showKeyboard, setShowKeyboard] = useState(true);
+  const [companyChoices, setCompanyChoices] = useState<Array<{ id: string; name: string }>>([]);
 
-  const handleSubmit = async (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent, companyId?: string) => {
     if (e) e.preventDefault();
     if (!username.trim() || !password.trim()) {
       setErrorMsg('يرجى إدخال اسم المستخدم وكلمة المرور');
@@ -29,11 +30,16 @@ export const LoginPage: React.FC = () => {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, ...(companyId ? { companyId } : {}) }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'فشل تسجيل الدخول');
+      if (data.requiresCompanySelection) {
+        setCompanyChoices(data.companies || []);
+        return;
+      }
+      setCompanyChoices([]);
 
       // حفظ التوكن وبيانات المستخدم في التخزين الآمن
       localStorage.setItem('dawacore_token', data.accessToken);
@@ -124,6 +130,20 @@ export const LoginPage: React.FC = () => {
           </div>
         )}
 
+        {companyChoices.length > 0 && (
+          <div className="mb-3 rounded-xl border border-teal-200 bg-teal-50 p-3">
+            <p className="mb-2 text-xs font-bold text-teal-800">اختر الشركة لإكمال تسجيل الدخول</p>
+            <div className="grid gap-2">
+              {companyChoices.map((company) => (
+                <button key={company.id} type="button" disabled={isLoading} onClick={() => handleSubmit(undefined, company.id)}
+                  className="rounded-lg border border-teal-300 bg-white p-2 text-sm font-bold text-teal-800 hover:bg-teal-100">
+                  {company.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-3">
           {/* حقل اسم المستخدم */}
           <div>
@@ -142,7 +162,7 @@ export const LoginPage: React.FC = () => {
                 value={username}
                 onFocus={() => setActiveField('username')}
                 onClick={() => setActiveField('username')}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => { setUsername(e.target.value); setCompanyChoices([]); }}
                 placeholder="مثال: cashier_01 أو admin"
                 autoComplete="username"
                 maxLength={64}
@@ -181,7 +201,7 @@ export const LoginPage: React.FC = () => {
                 value={password}
                 onFocus={() => setActiveField('password')}
                 onClick={() => setActiveField('password')}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => { setPassword(e.target.value); setCompanyChoices([]); }}
                 placeholder="••••••••"
                 autoComplete="current-password"
                 maxLength={128}

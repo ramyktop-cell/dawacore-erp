@@ -56,8 +56,8 @@ export class UsersService {
       throw new ConflictException('اسم تسجيل الدخول مطلوب');
     }
 
-    const existingUsername = await this.prisma.user.findUnique({
-      where: { username: cleanUsername },
+    const existingUsername = await this.prisma.user.findFirst({
+      where: { companyId: effectiveCompanyId, username: cleanUsername },
     });
     if (existingUsername) {
       throw new ConflictException(`اسم الدخول "${cleanUsername}" مستخدم بالفعل، يرجى اختيار اسم مستخدم آخر`);

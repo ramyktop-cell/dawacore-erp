@@ -443,7 +443,7 @@ async function main() {
   ];
 
   for (const u of usersToSeed) {
-    const existingUser = await prisma.user.findUnique({ where: { username: u.username } });
+    const existingUser = await prisma.user.findUnique({ where: { companyId_username: { companyId: company.id, username: u.username } } });
     if (!existingUser) {
       await prisma.user.create({
         data: {

@@ -843,7 +843,7 @@ model User {
   companyId    String
   branchId     String? // اختياري لمديري الشركات، إلزامي لموظفي الفروع
   name         String
-  username     String   @unique
+  username     String
   email        String?  @unique
   passwordHash String
   role         Role     @default(CASHIER)
@@ -867,6 +867,7 @@ model User {
 
   @@index([companyId])
   @@index([branchId])
+  @@unique([companyId, username])
 }
 
 // ------------------- 12. المصروفات وسندات الصرف -------------------

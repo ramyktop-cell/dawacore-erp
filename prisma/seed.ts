@@ -851,7 +851,7 @@ async function main() {
 
   for (const u of usersList) {
     const user = await prisma.user.upsert({
-      where: { username: u.username },
+      where: { companyId_username: { companyId: company.id, username: u.username } },
       update: {},
       create: {
         username: u.username,

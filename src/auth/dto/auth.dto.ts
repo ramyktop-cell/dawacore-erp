@@ -10,6 +10,10 @@ export class LoginDto {
   @IsNotEmpty({ message: 'كلمة المرور إلزامية' })
   password: string;
 
+  @IsUUID('all', { message: 'companyId غير صالح' })
+  @IsOptional()
+  companyId?: string;
+
   @IsString()
   @IsOptional()
   branchId?: string;
@@ -58,6 +62,10 @@ export class ChangePasswordDto {
   @IsNotEmpty()
   @MaxLength(100)
   username: string;
+
+  @IsUUID('all', { message: 'companyId غير صالح' })
+  @IsOptional()
+  companyId?: string;
 
   @IsString()
   @IsNotEmpty()

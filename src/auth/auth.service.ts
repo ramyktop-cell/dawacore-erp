@@ -14,14 +14,39 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
+  private async matchingUsers(username: string, password: string, companyId?: string) {
+    const candidates = await this.prisma.user.findMany({
+      where: {
+        username: username.trim(),
+        isActive: true,
+        ...(companyId ? { companyId } : {}),
+      },
+      include: { company: true, branch: true },
+    });
+    const matches = [];
+    for (const candidate of candidates) {
+      if (await bcrypt.compare(password, candidate.passwordHash)) matches.push(candidate);
+    }
+    return matches;
+  }
+
+  private companySelection(users: Array<{ companyId: string; company: { name: string } | null }>) {
+    return {
+      requiresCompanySelection: true as const,
+      companies: users.map((user) => ({ id: user.companyId, name: user.company?.name || 'الشركة' })),
+    };
+  }
+
   async changePassword(dto: ChangePasswordDto) {
     if (Buffer.byteLength(dto.newPassword, 'utf8') > 72 || dto.newPassword.length < 12) {
       throw new BadRequestException('كلمة المرور الجديدة يجب أن تكون 12 حرفاً على الأقل وألا تتجاوز 72 بايت');
     }
-    const user = await this.prisma.user.findUnique({ where: { username: dto.username } });
-    if (!user?.isActive || !(await bcrypt.compare(dto.currentPassword, user.passwordHash))) {
+    const matches = await this.matchingUsers(dto.username, dto.currentPassword, dto.companyId);
+    if (matches.length === 0) {
       throw new UnauthorizedException('اسم المستخدم أو كلمة المرور الحالية غير صحيحة أو الحساب معطل');
     }
+    if (!dto.companyId && matches.length > 1) return this.companySelection(matches);
+    const user = matches[0];
     if (await bcrypt.compare(dto.newPassword, user.passwordHash)) {
       throw new BadRequestException('اختر كلمة مرور جديدة تختلف عن الحالية');
     }
@@ -36,22 +61,12 @@ export class AuthService {
   }
 
   async login(credentials: LoginDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { username: credentials.username },
-      include: {
-        company: true,
-        branch: true,
-      },
-    });
-
-    if (!user || !user.isActive) {
+    const matches = await this.matchingUsers(credentials.username, credentials.password, credentials.companyId);
+    if (matches.length === 0) {
       throw new UnauthorizedException('بيانات الدخول غير صحيحة أو الحساب معطل');
     }
-
-    const isMatch = await bcrypt.compare(credentials.password, user.passwordHash);
-    if (!isMatch) {
-      throw new UnauthorizedException('بيانات الدخول غير صحيحة');
-    }
+    if (!credentials.companyId && matches.length > 1) return this.companySelection(matches);
+    const user = matches[0];
 
     const payload = {
       sub: user.id,

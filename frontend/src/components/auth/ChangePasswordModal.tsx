@@ -9,16 +9,19 @@ export const ChangePasswordModal: React.FC<{ initialUsername: string; onClose: (
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const [companyChoices, setCompanyChoices] = useState<Array<{ id: string; name: string }>>([]);
+  const submit = async (event?: React.FormEvent, companyId?: string) => {
+    event?.preventDefault();
     setError('');
     if (newPassword !== confirmation) { setError('تأكيد كلمة المرور غير مطابق'); return; }
     if (new TextEncoder().encode(newPassword).length > 72) { setError('كلمة المرور تتجاوز الحد المسموح؛ استخدم كلمة أقصر'); return; }
     setBusy(true);
     try {
-      const response = await fetch('/api/auth/change-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: username.trim(), currentPassword, newPassword }) });
+      const response = await fetch('/api/auth/change-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: username.trim(), currentPassword, newPassword, ...(companyId ? { companyId } : {}) }) });
       const data = await response.json();
       if (!response.ok) throw new Error(Array.isArray(data.message) ? data.message.join('، ') : data.message || 'تعذر تغيير كلمة المرور');
+      if (data.requiresCompanySelection) { setCompanyChoices(data.companies || []); return; }
+      setCompanyChoices([]);
       localStorage.removeItem('dawacore_token');
       localStorage.removeItem('dawacore_user');
       useAuthStore.getState().logout();
@@ -33,9 +36,13 @@ export const ChangePasswordModal: React.FC<{ initialUsername: string; onClose: (
       <h2 id="change-password-title" className="mb-2 text-xl font-bold text-slate-800">تغيير كلمة المرور</h2>
       <p className="mb-4 text-sm text-slate-600">يمكن لكل مستخدم تغيير كلمة مروره بعد إدخال الكلمة الحالية. إذا نسيتها، تواصل مع مدير النظام.</p>
       {error && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {companyChoices.length > 0 && <div className="mb-3 space-y-2 rounded-lg bg-teal-50 p-3">
+        <p className="text-sm font-bold text-teal-800">اختر الشركة لإكمال تغيير كلمة المرور</p>
+        {companyChoices.map(company => <button key={company.id} type="button" disabled={busy} onClick={() => submit(undefined, company.id)} className="w-full rounded-lg border border-teal-300 bg-white p-2 text-sm font-bold text-teal-800">{company.name}</button>)}
+      </div>}
       {success ? <p role="status" className="rounded-lg bg-green-50 p-3 text-green-800">{success}</p> : <form onSubmit={submit} className="space-y-3">
-        <label className="block text-sm">اسم المستخدم<input autoFocus required maxLength={100} autoComplete="username" className={inputClass} value={username} onChange={e => setUsername(e.target.value)} disabled={busy} /></label>
-        <label className="block text-sm">كلمة المرور الحالية<input required type="password" maxLength={256} autoComplete="current-password" className={inputClass} value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} disabled={busy} /></label>
+        <label className="block text-sm">اسم المستخدم<input autoFocus required maxLength={100} autoComplete="username" className={inputClass} value={username} onChange={e => { setUsername(e.target.value); setCompanyChoices([]); }} disabled={busy} /></label>
+        <label className="block text-sm">كلمة المرور الحالية<input required type="password" maxLength={256} autoComplete="current-password" className={inputClass} value={currentPassword} onChange={e => { setCurrentPassword(e.target.value); setCompanyChoices([]); }} disabled={busy} /></label>
         <label className="block text-sm">كلمة المرور الجديدة (12 حرفاً على الأقل)<input required type="password" minLength={12} maxLength={72} autoComplete="new-password" className={inputClass} value={newPassword} onChange={e => setNewPassword(e.target.value)} disabled={busy} /></label>
         <label className="block text-sm">تأكيد كلمة المرور الجديدة<input required type="password" minLength={12} maxLength={72} autoComplete="new-password" className={inputClass} value={confirmation} onChange={e => setConfirmation(e.target.value)} disabled={busy} /></label>
         <button type="submit" disabled={busy} className="w-full rounded-xl bg-teal-600 p-3 font-bold text-white disabled:opacity-50">{busy ? 'جارٍ التغيير...' : 'حفظ كلمة المرور الجديدة'}</button>
