@@ -77,10 +77,15 @@ describe('AuthService', () => {
       sign: jest.fn().mockReturnValue('signed-jwt-token'),
     };
 
+    const auditService: any = {
+      log: jest.fn().mockResolvedValue(undefined),
+    };
+
     return {
-      service: new AuthService(prisma, jwtService),
+      service: new AuthService(prisma, jwtService, auditService),
       prisma,
       jwtService,
+      auditService,
     };
   };
 

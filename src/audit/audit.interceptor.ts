@@ -20,37 +20,37 @@ function resolveAuditMeta(method: string, url: string): { action: string; entity
 
   // Map URL segments → entity names (Arabic-friendly)
   const entityMap: Record<string, string> = {
-    'auth': 'Auth',
-    'medicines': 'Medicine',
-    'sales': 'Sale',
-    'purchases': 'Purchase',
-    'purchase-orders': 'PurchaseOrder',
-    'returns': 'Return',
-    'inventory': 'Inventory',
-    'shifts': 'Shift',
-    'users': 'User',
-    'branches': 'Branch',
-    'companies': 'Company',
-    'customers': 'Customer',
-    'suppliers': 'Supplier',
-    'expenses': 'Expense',
-    'receipts': 'Receipt',
-    'accounts': 'Account',
-    'reports': 'Report',
-    'audit-logs': 'AuditLog',
-    'stock-count': 'StockCount',
-    'opening-balance': 'OpeningBalance',
-    'batches': 'Batch',
-    'dashboard': 'Dashboard',
-    'branding': 'Branding',
-    'licensing': 'Licensing',
+    'auth': 'المصادقة والمستخدمين',
+    'medicines': 'دليل الأدوية والأصناف',
+    'sales': 'فواتير المبيعات',
+    'purchases': 'فواتير المشتريات والتوريد',
+    'purchase-orders': 'أوامر الشراء',
+    'returns': 'مرتجع المبيعات',
+    'inventory': 'المخزون وحركات المستودع',
+    'shifts': 'الورديات والخزينة',
+    'users': 'إدارة المستخدمين والصلاحيات',
+    'branches': 'إدارة الفروع',
+    'companies': 'الشركات والكيانات',
+    'customers': 'حسابات العملاء',
+    'suppliers': 'إدارة الموردين',
+    'expenses': 'سندات الصرف والمصروفات',
+    'receipts': 'سندات القبض والإيرادات',
+    'accounts': 'شجرة الحسابات والقيود',
+    'reports': 'التقارير المالية والمحاسبية',
+    'audit-logs': 'سجل الرقابة',
+    'stock-count': 'الجرد والتسويات',
+    'opening-balance': 'الأرصدة الافتتاحية',
+    'batches': 'التشغيلات والصلاحيات',
+    'dashboard': 'لوحة التحكم',
+    'branding': 'الهوية البصرية',
+    'licensing': 'التراخيص والتفعيل',
   };
 
   const methodActionMap: Record<string, string> = {
-    POST: 'CREATE',
-    PUT: 'UPDATE',
-    PATCH: 'UPDATE',
-    DELETE: 'DELETE',
+    POST: 'CREATE_RECORD',
+    PUT: 'UPDATE_RECORD',
+    PATCH: 'UPDATE_RECORD',
+    DELETE: 'DELETE_RECORD',
     GET: 'VIEW',
   };
 
@@ -73,9 +73,9 @@ function resolveAuditMeta(method: string, url: string): { action: string; entity
   // Special sub-actions
   let action = methodActionMap[method] || method;
   const lastSeg = segments[segments.length - 1];
-  if (lastSeg === 'login') action = 'LOGIN';
-  else if (lastSeg === 'logout') action = 'LOGOUT';
-  else if (lastSeg === 'page-view') action = 'NAVIGATE_SCREEN';
+  if (lastSeg === 'login') action = 'USER_LOGIN';
+  else if (lastSeg === 'logout') action = 'USER_LOGOUT';
+  else if (lastSeg === 'page-view') action = 'SCREEN_VIEW';
   else if (lastSeg === 'bulk-import' || lastSeg === 'import') action = 'IMPORT';
   else if (lastSeg === 'approve') action = 'APPROVE';
   else if (lastSeg === 'reject') action = 'REJECT';
@@ -149,19 +149,39 @@ export class AuditInterceptor implements NestInterceptor {
           || (res?.data?.id as string)
           || '';
 
-        const auditChanges = action === 'NAVIGATE_SCREEN'
-          ? { screen: body?.screenName, path: body?.path || url }
-          : method !== 'DELETE'
-          ? { url, method, bodyKeys: body ? Object.keys(body).filter(k => !k.toLowerCase().includes('password')) : [] }
-          : { url, method };
+        const auditChanges = action === 'SCREEN_VIEW'
+          ? {
+              screenName: body?.screenName,
+              path: body?.path || url,
+              userName: user?.name || user?.username,
+              userRole: user?.role,
+              actionLabel: 'دخول وتصفح شاشة',
+              summary: `دخل المستخدم (${user?.name || user?.username}) إلى شاشة «${body?.screenName || body?.path || url}»`,
+            }
+          : {
+              url,
+              method,
+              userName: user?.name || user?.username,
+              userRole: user?.role,
+              actionLabel:
+                action === 'CREATE_RECORD' ? '➕ إدخال / إضافة جديدة' :
+                action === 'UPDATE_RECORD' ? '✏️ تعديل بيانات' :
+                action === 'DELETE_RECORD' ? '🗑️ حذف سجل' : action,
+              summary:
+                action === 'CREATE_RECORD' ? `قام المستخدم (${user?.name || user?.username}) بإضافة سجل جديد في (${entityType})` :
+                action === 'UPDATE_RECORD' ? `قام المستخدم (${user?.name || user?.username}) بتعديل بيانات في (${entityType})` :
+                action === 'DELETE_RECORD' ? `قام المستخدم (${user?.name || user?.username}) بحذف سجل من (${entityType})` :
+                `${action} في (${entityType})`,
+              bodyKeys: method !== 'DELETE' && body ? Object.keys(body).filter(k => !k.toLowerCase().includes('password')) : [],
+            };
 
         this.auditService.log({
           companyId: user.companyId,
           branchId: user.branchId,
           userId: user.sub || user.id,
           action,
-          entityType: action === 'NAVIGATE_SCREEN' ? 'Screen' : entityType,
-          entityId: action === 'NAVIGATE_SCREEN' ? (body?.screenName || 'Unknown') : finalEntityId,
+          entityType: action === 'SCREEN_VIEW' ? 'تصفح الشاشات' : entityType,
+          entityId: action === 'SCREEN_VIEW' ? (body?.screenName || 'Unknown') : finalEntityId,
           changes: auditChanges,
           ipAddress: req.ip,
           userAgent: req.headers['user-agent'],

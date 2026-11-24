@@ -47,6 +47,33 @@ export const LoginPage: React.FC = () => {
       localStorage.setItem('dawacore_user', JSON.stringify(data.user));
       useAuthStore.getState().setAuth(data.user, data.accessToken);
 
+      // تسجيل دخول المستخدم في سجل الرقابة
+      try {
+        await fetch('/api/dashboard/audit-logs/track', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${data.accessToken}`,
+          },
+          body: JSON.stringify({
+            companyId: data.user.companyId,
+            branchId: data.user.branchId,
+            userId: data.user.id || data.user.username,
+            userName: data.user.name || data.user.username,
+            userRole: data.user.role,
+            action: 'USER_LOGIN',
+            actionLabel: 'تسجيل دخول',
+            entityType: 'تسجيل الدخول',
+            entityId: data.user.id,
+            screenName: 'شاشة تسجيل الدخول',
+            path: '/login',
+            summary: `قام المستخدم (${data.user.name || data.user.username}) بتسجيل الدخول إلى النظام بنجاح`,
+          }),
+        });
+      } catch {
+        // ignore audit failure on login
+      }
+
       // التوجيه المباشر بناءً على الصلاحيات
       const role = data.user.role || (data.user.roles && data.user.roles[0]);
       if (role === 'CASHIER') {

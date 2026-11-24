@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import * as bcrypt from 'bcryptjs';
 import { ChangePasswordDto, LoginDto, VerifyPinDto } from './dto/auth.dto';
 import { Role } from '@prisma/client';
@@ -29,6 +30,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly auditService: AuditService,
   ) {}
 
   async changePassword(dto: ChangePasswordDto) {
@@ -104,7 +106,7 @@ export class AuthService {
       roles: [user.role],
     };
 
-    return {
+    const responseData = {
       accessToken: this.jwtService.sign(payload),
       user: {
         id: user.id,
@@ -123,6 +125,24 @@ export class AuthService {
         roles: [user.role],
       },
     };
+
+    // تسجيل الدخول في سجل الرقابة
+    await this.auditService.log({
+      companyId: user.companyId,
+      branchId: user.branchId ?? undefined,
+      userId: user.id,
+      action: 'USER_LOGIN',
+      entityType: 'تسجيل الدخول',
+      entityId: user.id,
+      changes: {
+        userName: user.name,
+        userRole: user.role,
+        actionLabel: 'تسجيل دخول',
+        summary: `قام المستخدم (${user.name}) بتسجيل الدخول للنظام بنجاح`,
+      },
+    });
+
+    return responseData;
   }
 
   /**

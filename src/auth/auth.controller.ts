@@ -25,6 +25,22 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'تسجيل الخروج من المنظومة' })
   async logout(@Req() req: any) {
+    if (req?.user) {
+      await this.authService['auditService']?.log({
+        companyId: req.user.companyId,
+        branchId: req.user.branchId ?? undefined,
+        userId: req.user.sub || req.user.id,
+        action: 'USER_LOGOUT',
+        entityType: 'تسجيل الخروج',
+        entityId: req.user.sub || req.user.id,
+        changes: {
+          userName: req.user.name || req.user.username,
+          userRole: req.user.role,
+          actionLabel: 'تسجيل خروج',
+          summary: `قام المستخدم (${req.user.name || req.user.username}) بتسجيل الخروج من النظام`,
+        },
+      });
+    }
     return { success: true, message: 'تم تسجيل الخروج بنجاح' };
   }
 
@@ -32,6 +48,24 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'تسجيل فتح أو دخول شاشة معينة' })
   async trackPageView(@Body() body: { screenName: string; path?: string }, @Req() req: any) {
+    if (req?.user) {
+      await this.authService['auditService']?.log({
+        companyId: req.user.companyId,
+        branchId: req.user.branchId ?? undefined,
+        userId: req.user.sub || req.user.id,
+        action: 'SCREEN_VIEW',
+        entityType: 'تصفح الشاشات',
+        entityId: body?.path || '-',
+        changes: {
+          userName: req.user.name || req.user.username,
+          userRole: req.user.role,
+          screenName: body?.screenName || body?.path,
+          path: body?.path,
+          actionLabel: 'دخول وتصفح شاشة',
+          summary: `دخل المستخدم (${req.user.name || req.user.username}) إلى شاشة «${body?.screenName || body?.path}»`,
+        },
+      });
+    }
     return { success: true };
   }
 
