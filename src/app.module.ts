@@ -13,6 +13,7 @@ import { MedicinesModule } from './medicines/medicines.module';
 import { AccountingModule } from './accounting/accounting.module';
 import { ReportsModule } from './reports/reports.module';
 import { AuthModule } from './auth/auth.module';
+import { AuditModule } from './audit/audit.module';
 import { CompaniesModule } from './companies/companies.module';
 import { BranchesModule } from './branches/branches.module';
 import { UsersModule } from './users/users.module';
@@ -38,6 +39,7 @@ import { BrandingModule } from './branding/branding.module';
     OpeningBalanceModule,
     AccountingReportsModule,
     LicensingModule,
+    AuditModule,
     PrismaModule,
     AuthModule,
     UsersModule,

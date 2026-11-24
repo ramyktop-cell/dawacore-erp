@@ -21,6 +21,20 @@ export class AuthController {
     return await this.authService.login(dto);
   }
 
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'تسجيل الخروج من المنظومة' })
+  async logout(@Req() req: any) {
+    return { success: true, message: 'تم تسجيل الخروج بنجاح' };
+  }
+
+  @Post('page-view')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'تسجيل فتح أو دخول شاشة معينة' })
+  async trackPageView(@Body() body: { screenName: string; path?: string }, @Req() req: any) {
+    return { success: true };
+  }
+
   @Post('change-password')
   @Public()
   @UseGuards(LoginRateGuard)

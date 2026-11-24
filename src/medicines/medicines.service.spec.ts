@@ -55,7 +55,7 @@ describe('MedicinesService - Unit Labels & Weighed Items', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new MedicinesService(mockPrisma);
+    service = new MedicinesService(mockPrisma as any, { log: jest.fn(), findAll: jest.fn() } as any);
   });
 
   describe('getDefaultUnitLabel fallback logic', () => {

@@ -2,6 +2,7 @@ import { parseScaleBarcodeValue, scaleQuantity } from '../shared/scale-core';
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, Role } from '@prisma/client';
+import { AuditService } from '../audit/audit.service';
 import { AuthenticatedUser } from '../auth/security.policy';
 import {
   CreateMedicineDto,
@@ -25,7 +26,7 @@ export function getDefaultUnitLabel(unitType: string, isWeighed?: boolean): stri
 @Injectable()
 export class MedicinesService {
   private readonly logger = new Logger(MedicinesService.name);
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly auditService: AuditService) {}
 
   getDefaultUnitLabel(unitType: string, isWeighed?: boolean): string {
     return getDefaultUnitLabel(unitType, isWeighed);
@@ -332,55 +333,62 @@ export class MedicinesService {
       unitsData[0].isDefault = true;
     }
 
-    const medicine = await this.prisma.medicine.create({
-      data: {
-        companyId: actor.companyId,
-        code,
-        isWeighed: dto.isWeighed ?? false,
-        scalePlu: dto.isWeighed ? dto.scalePlu : null,
-        barcode: dto.barcode.trim(),
-        tradeName: dto.tradeName.trim(),
-        scientificName: (dto.scientificName || '').trim(),
-        category: dto.category.trim(),
-        minStockLevel: dto.minStockLevel ?? 10,
-        units: {
-          create: unitsData.map((u) => {
-            const price = new Prisma.Decimal(u.price || 0);
-            if (price.isNegative()) {
-              throw new BadRequestException(`سعر الوحدة (${u.unitType}) لا يمكن أن يكون سالباً`);
-            }
-            let minSalePrice: Prisma.Decimal;
-            if (dto.isWeighed) {
-              minSalePrice = price;
-            } else if (u.minSalePrice !== undefined && u.minSalePrice !== null) {
-              minSalePrice = new Prisma.Decimal(u.minSalePrice);
-              if (minSalePrice.isNegative()) {
-                throw new BadRequestException(`الحد الأدنى لسعر البيع للوحدة (${u.unitType}) لا يمكن أن يكون سالباً`);
+    const createdMedicine = await this.prisma.medicine.create({
+        data: {
+          companyId: actor.companyId,
+          code,
+          isWeighed: dto.isWeighed ?? false,
+          scalePlu: dto.isWeighed ? dto.scalePlu : null,
+          barcode: dto.barcode.trim(),
+          tradeName: dto.tradeName.trim(),
+          scientificName: (dto.scientificName || '').trim(),
+          category: dto.category.trim(),
+          minStockLevel: dto.minStockLevel ?? 10,
+          units: {
+            create: unitsData.map((u) => {
+              const price = new Prisma.Decimal(u.price || 0);
+              if (price.isNegative()) {
+                throw new BadRequestException(`سعر الوحدة (${u.unitType}) لا يمكن أن يكون سالباً`);
               }
-              if (minSalePrice.greaterThan(price)) {
-                throw new BadRequestException(`الحد الأدنى لسعر البيع للوحدة (${u.unitType}) لا يمكن أن يتجاوز سعر البيع الافتراضي`);
+              let minSalePrice: Prisma.Decimal;
+              if (dto.isWeighed) {
+                minSalePrice = price;
+              } else if (u.minSalePrice !== undefined && u.minSalePrice !== null) {
+                minSalePrice = new Prisma.Decimal(u.minSalePrice);
+                if (minSalePrice.isNegative()) {
+                  throw new BadRequestException(`الحد الأدنى لسعر البيع للوحدة (${u.unitType}) لا يمكن أن يكون سالباً`);
+                }
+                if (minSalePrice.greaterThan(price)) {
+                  throw new BadRequestException(`الحد الأدنى لسعر البيع للوحدة (${u.unitType}) لا يمكن أن يتجاوز سعر البيع الافتراضي`);
+                }
+              } else {
+                minSalePrice = price;
               }
-            } else {
-              minSalePrice = price;
-            }
-            return {
-              unitType: u.unitType,
-              label: (u.label && u.label.trim()) ? u.label.trim() : getDefaultUnitLabel(u.unitType, dto.isWeighed),
-              multiplier: Number(u.multiplier),
-              price,
-              minSalePrice,
-              barcode: u.barcode ? u.barcode.trim() : null,
-              isDefault: !!u.isDefault,
-            };
-          }),
+              return {
+                unitType: u.unitType,
+                label: (u.label && u.label.trim()) ? u.label.trim() : getDefaultUnitLabel(u.unitType, dto.isWeighed),
+                multiplier: Number(u.multiplier),
+                price,
+                minSalePrice,
+                barcode: u.barcode ? u.barcode.trim() : null,
+                isDefault: !!u.isDefault,
+              };
+            }),
+          },
         },
-      },
-      include: {
-        units: true,
-      },
+        include: { units: true },
+      });
+
+    await this.auditService.log({
+      companyId: actor.companyId,
+      branchId: actor.branchId,
+      userId: actor.id,
+      action: 'CREATE',
+      entityType: 'Medicine',
+      entityId: createdMedicine.id,
     });
 
-    return medicine;
+    return createdMedicine;
   }
 
   /**
@@ -463,7 +471,16 @@ export class MedicinesService {
         });
       }
 
-      const updated = await tx.medicine.update({
+      await this.auditService.log({
+        companyId: actor.companyId,
+        branchId: actor.branchId,
+        userId: actor.id,
+        action: 'UPDATE',
+        entityType: 'Medicine',
+        entityId: id,
+      });
+
+      const updated = await this.prisma.medicine.update({
         where: { id },
         data: {
           ...(dto.isWeighed !== undefined ? { isWeighed: dto.isWeighed, scalePlu: dto.isWeighed ? dto.scalePlu ?? existing.scalePlu : null } : dto.scalePlu !== undefined ? { scalePlu: effectiveWeighed ? dto.scalePlu : null } : {}),
@@ -994,6 +1011,14 @@ export class MedicinesService {
             },
           });
           medicineId = created.id;
+          await this.auditService.log({
+            companyId: actor?.companyId,
+            branchId: actor?.branchId,
+            userId: actor?.id,
+            action: 'IMPORT',
+            entityType: 'Medicine',
+            entityId: created.id,
+          });
           createdCount++;
         }
 
