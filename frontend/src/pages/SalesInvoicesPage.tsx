@@ -8,6 +8,7 @@ import { downloadReport } from '../api/http';
 import { PageHeader } from '../components/common/PageHeader';
 import { DataTable } from '../components/common/DataTable';
 import { getCurrentUser } from '../utils/permissions';
+import { getBusinessTerminology } from '../utils/business-terminology';
 import { ThermalPrinterService, generateCode128Svg } from '../services/printer.service';
 import { installPosConsoleGuard } from '../utils/pos-security';
 import {
@@ -1115,8 +1116,10 @@ export const SalesInvoicesPage: React.FC = () => {
             {/* Printable Receipt Paper */}
             <div id="printable-receipt" className="p-4 bg-white border border-dashed border-slate-300 rounded-xl space-y-3 font-mono text-xs text-slate-800">
               <div className="text-center pb-2 border-b border-dashed border-slate-300">
-                <h2 className="font-black text-base text-teal-800">DawaCore Pharmacy</h2>
-                <p className="text-[11px] text-slate-500">نظام إدارة الصيدليات الموحد</p>
+                <h2 className="font-black text-base text-teal-800">
+                  {(selectedInvoice.branch as any)?.company?.name || currentUser?.companyName || 'MadarCore'}
+                </h2>
+                <p className="text-[11px] text-slate-500">{getBusinessTerminology().systemSubtitle}</p>
                 <p className="text-[11px] text-slate-500">{selectedInvoice.branch?.name || 'الفرع الرئيسي'}</p>
                 <p className="font-bold text-xs mt-1 text-teal-700">{selectedInvoice.invoiceNumber}</p>
                 <p className="text-[10px] text-slate-400">

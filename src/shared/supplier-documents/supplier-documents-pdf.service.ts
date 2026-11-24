@@ -89,7 +89,7 @@ export class SupplierDocumentsPdfService {
       defaultStyle: { font: 'Cairo', alignment: 'right', fontSize: 9 },
       footer: (currentPage: number, pageCount: number) => ({
         columns: [
-          { text: 'نظام DawaCore ERP المحاسبي', alignment: 'right', fontSize: 8, color: '#94A3B8' },
+          { text: 'منصة MadarCore ERP المحاسبية', alignment: 'right', fontSize: 8, color: '#94A3B8' },
           { text: `صفحة ${currentPage} من ${pageCount}`, alignment: 'center', fontSize: 8, color: '#94A3B8' },
           { text: `تاريخ الاستخراج: ${new Date().toLocaleDateString('ar-EG')}`, alignment: 'left', fontSize: 8, color: '#94A3B8' },
         ],
@@ -102,7 +102,7 @@ export class SupplierDocumentsPdfService {
             {
               width: '50%',
               text: [
-                { text: `${company.name || 'مجموعة صيدليات داواكور'}\n`, fontSize: 14, bold: true, color: '#582949' },
+                { text: `${company.name || 'مدار كور'}\n`, fontSize: 14, bold: true, color: '#582949' },
                 { text: `فرع: ${branch.name || 'كافة الفروع المصرح بها'}\n`, fontSize: 9, color: '#64748B' },
               ],
             },
@@ -344,7 +344,7 @@ export class SupplierDocumentsPdfService {
           {
             width: '50%',
             text: [
-              { text: `${company.name || 'مجموعة صيدليات داواكور'}\n`, fontSize: 13, bold: true, color: '#582949' },
+              { text: `${company.name || 'مدار كور'}\n`, fontSize: 13, bold: true, color: '#582949' },
               { text: `فرع: ${branch.name || 'كافة الفروع'}\n`, fontSize: 8.5, color: '#64748B' },
             ],
           },
@@ -553,7 +553,7 @@ export class SupplierDocumentsPdfService {
       defaultStyle: { font: 'Cairo', alignment: 'right', fontSize: 8.5 },
       footer: (currentPage: number, pageCount: number) => ({
         columns: [
-          { text: 'نظام DawaCore ERP المحاسبي - تقرير الدائنين', alignment: 'right', fontSize: 8, color: '#94A3B8' },
+          { text: 'منصة MadarCore ERP المحاسبية - تقرير الدائنين', alignment: 'right', fontSize: 8, color: '#94A3B8' },
           { text: `صفحة ${currentPage} من ${pageCount}`, alignment: 'center', fontSize: 8, color: '#94A3B8' },
           { text: `تاريخ التصدير: ${new Date().toLocaleDateString('ar-EG')}`, alignment: 'left', fontSize: 8, color: '#94A3B8' },
         ],
@@ -594,7 +594,7 @@ export class SupplierDocumentsPdfService {
       defaultStyle: { font: 'Cairo', alignment: 'right', fontSize: 9 },
       footer: (currentPage: number, pageCount: number) => ({
         columns: [
-          { text: 'نظام DawaCore ERP - إدارة المشتريات والموردين', alignment: 'right', fontSize: 8, color: '#94A3B8' },
+          { text: 'منصة MadarCore ERP - إدارة المشتريات والموردين', alignment: 'right', fontSize: 8, color: '#94A3B8' },
           { text: `صفحة ${currentPage} من ${pageCount}`, alignment: 'center', fontSize: 8, color: '#94A3B8' },
           { text: `تاريخ الإصدار: ${new Date().toLocaleDateString('ar-EG')}`, alignment: 'left', fontSize: 8, color: '#94A3B8' },
         ],
@@ -607,7 +607,7 @@ export class SupplierDocumentsPdfService {
             {
               width: '50%',
               text: [
-                { text: `${company.name || 'مجموعة صيدليات داواكور'}\n`, fontSize: 13, bold: true, color: '#582949' },
+                { text: `${company.name || 'مدار كور'}\n`, fontSize: 13, bold: true, color: '#582949' },
                 { text: `الفرع: ${branch.name || 'الفرع الرئيسي'}\n`, fontSize: 8.5, color: '#64748B' },
               ],
             },
@@ -839,7 +839,7 @@ export class SupplierDocumentsPdfService {
       defaultStyle: { font: 'Cairo', alignment: 'right', fontSize: 9 },
       footer: (currentPage: number, pageCount: number) => ({
         columns: [
-          { text: 'نظام DawaCore ERP - مستند استلام وتوريد مخزني رسمي', alignment: 'right', fontSize: 8, color: '#94A3B8' },
+          { text: 'منصة MadarCore ERP - مستند استلام وتوريد مخزني رسمي', alignment: 'right', fontSize: 8, color: '#94A3B8' },
           { text: `صفحة ${currentPage} من ${pageCount}`, alignment: 'center', fontSize: 8, color: '#94A3B8' },
           { text: `تاريخ التصدير: ${new Date().toLocaleDateString('ar-EG')}`, alignment: 'left', fontSize: 8, color: '#94A3B8' },
         ],
@@ -852,7 +852,7 @@ export class SupplierDocumentsPdfService {
             {
               width: '50%',
               text: [
-                { text: `${company.name || 'مجموعة صيدليات داواكور'}\n`, fontSize: 13, bold: true, color: '#582949' },
+                { text: `${company.name || 'مدار كور'}\n`, fontSize: 13, bold: true, color: '#582949' },
                 { text: `مستودع فرع: ${branch.name || 'الفرع الرئيسي'}\n`, fontSize: 9, color: '#64748B' },
               ],
             },
@@ -1022,7 +1022,7 @@ export class SupplierDocumentsPdfService {
             {
               width: '55%',
               text: [
-                { text: `${payment.company?.name || 'DawaCore'}\n`, bold: true, fontSize: 15, color: '#582949' },
+                { text: `${payment.company?.name || 'MadarCore'}\n`, bold: true, fontSize: 15, color: '#582949' },
                 { text: `الفرع: ${payment.branch?.name || '—'}`, color: '#475569' },
               ],
             },

@@ -1,0 +1,55 @@
+{
+  "releaseId": "MadarCore-Client-Upgrade-20261116",
+  "name": "MadarCore Client Upgrade Package",
+  "version": "1.0.0",
+  "minNodeVersion": "20.19.0",
+  "allowedNodeRanges": [
+    { "major": 20, "minMinor": 19 },
+    { "major": 22 }
+  ],
+  "supportedPostgresVersions": [15, 16],
+  "allowedPostgresRange": {
+    "min": 15,
+    "max": 16
+  },
+  "supportedOperatingSystems": [
+    "Windows 10",
+    "Windows 11",
+    "Windows Server 2016",
+    "Windows Server 2019",
+    "Windows Server 2022"
+  ],
+  "minPowerShellVersion": "5.1",
+  "requiredPermissions": "Administrator",
+  "requiredPreflightFreeDiskMB": 2048,
+  "requiredSystemBrowser": ["Google Chrome", "Microsoft Edge"],
+  "defaultTargetDirectory": "C:\\DawaCore",
+  "preservedFiles": [
+    ".env",
+    "license.key",
+    "uploads",
+    "backups",
+    "prerequisites"
+  ],
+  "managedDirectories": [
+    "dist",
+    "node_modules",
+    "frontend/dist",
+    "prisma"
+  ],
+  "candidateMigrations": [
+    "20260907000000_init_inventory_core",
+    "20260907010000_add_purchasing_module",
+    "20260907020000_add_sales_shifts_and_held_carts",
+    "20260907030000_add_returns_module",
+    "20260907040000_enhanced_shifts_and_returns",
+    "20261023000000_add_purchase_cost_fields",
+    "20261023010000_add_accounting_settings_models",
+    "20261023020000_add_company_logo",
+    "20261027000000_weighed_products",
+    "20261105090000_supplier_payments",
+    "20261108000000_client_upgrade_receipts_and_expenses",
+    "20261111000000_medicine_unit_labels",
+    "20261111010000_medicine_unit_min_sale_price"
+  ]
+}

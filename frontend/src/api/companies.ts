@@ -8,6 +8,7 @@ export interface Company {
   email?: string;
   address?: string;
   logoUrl?: string;
+  businessType?: 'PHARMACY' | 'SUPERMARKET' | 'TRADING' | 'CLOTHING';
   isActive: boolean;
   _count?: { branches: number };
 }

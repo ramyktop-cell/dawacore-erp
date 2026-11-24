@@ -1,5 +1,6 @@
 import React from 'react';
 import { Receipt } from '../../api/receipts';
+import { getActiveCompanyBrand } from '../../utils/platform-brand';
 
 interface ReceiptPrintModalProps {
   isOpen: boolean;
@@ -12,9 +13,14 @@ export const ReceiptPrintModal: React.FC<ReceiptPrintModalProps> = ({
   isOpen,
   onClose,
   receipt,
-  companyName = 'DawaCore Pharmacy',
+  companyName,
 }) => {
   if (!isOpen || !receipt) return null;
+
+  const displayCompanyName =
+    companyName ||
+    (receipt as any).company?.name ||
+    getActiveCompanyBrand().displayNameAr;
 
   const handlePrint = () => {
     window.print();
@@ -58,7 +64,7 @@ export const ReceiptPrintModal: React.FC<ReceiptPrintModalProps> = ({
           <div className="border-b-2 border-slate-800 pb-4 mb-6">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-xl font-black text-slate-900">{companyName}</h1>
+                <h1 className="text-xl font-black text-slate-900">{displayCompanyName}</h1>
                 <p className="text-xs text-slate-500 font-bold mt-0.5">
                   الفرع: {receipt.branch?.name || 'الفرع الرئيسي'}
                 </p>
@@ -163,7 +169,7 @@ export const ReceiptPrintModal: React.FC<ReceiptPrintModalProps> = ({
 
           {/* Footer */}
           <div className="mt-8 pt-3 border-t border-slate-100 flex justify-between items-center text-[10px] text-slate-400 font-mono">
-            <span>نظام DawaCore ERP & POS المحاسبي</span>
+            <span>منصة MadarCore ERP & POS المحاسبية</span>
             <span>تاريخ الطباعة: {new Date().toLocaleString('ar-EG')}</span>
           </div>
         </div>

@@ -323,7 +323,7 @@ export const ReceiptsPage: React.FC = () => {
         isOpen={!!selectedReceiptForPrint}
         onClose={() => setSelectedReceiptForPrint(null)}
         receipt={selectedReceiptForPrint}
-        companyName={user?.companyId ? 'DawaCore Pharmacy' : undefined}
+        companyName={user?.companyName || undefined}
       />
     </div>
   );

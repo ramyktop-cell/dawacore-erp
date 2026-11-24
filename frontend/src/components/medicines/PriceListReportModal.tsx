@@ -58,8 +58,9 @@ export const PriceListReportModal: React.FC<PriceListReportModalProps> = ({
 
   const companyInfo = useMemo(() => {
     const companies: Company[] = companiesData?.items || (Array.isArray(companiesData) ? companiesData : []);
-    const matched =
-      companies.find((c) => c.id === currentUser?.companyId) || companies[0] || null;
+    const matched = currentUser?.companyId
+      ? companies.find((c) => c.id === currentUser.companyId) || null
+      : null;
 
     const getSetting = (key: string) =>
       settingsList.find((s) => s.key === key)?.value || '';
@@ -67,9 +68,10 @@ export const PriceListReportModal: React.FC<PriceListReportModalProps> = ({
     return {
       name:
         matched?.name ||
+        currentUser?.companyName ||
         getSetting('company.name') ||
         getSetting('COMPANY_NAME') ||
-        'DawaCore ERP',
+        'MadarCore ERP',
       phone:
         matched?.phone ||
         getSetting('company.phone') ||
@@ -85,9 +87,9 @@ export const PriceListReportModal: React.FC<PriceListReportModalProps> = ({
         getSetting('company.address') ||
         getSetting('COMPANY_ADDRESS') ||
         '',
-      logoUrl: matched?.logoUrl || '/logo.png',
+      logoUrl: matched?.logoUrl || (currentUser as any)?.companyLogoUrl || '/logo.png',
     };
-  }, [companiesData, settingsList, currentUser?.companyId]);
+  }, [companiesData, settingsList, currentUser?.companyId, currentUser?.companyName]);
 
   // استخراج بيانات الوحدة، سعر البيع (الجملة)، وسعر التجزئة، والكمية لكل صنف
   const resolvePricingRow = (item: Medicine) => {
@@ -603,7 +605,7 @@ export const PriceListReportModal: React.FC<PriceListReportModalProps> = ({
             {/* تذييل التقرير */}
             <div className="pt-4 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-400 font-semibold">
               <span>{companyInfo.name} — قائمة الأسعار المعتمدة</span>
-              <span>تم استخراج التقرير آلياً عبر نظام DawaCore ERP</span>
+              <span>تم استخراج التقرير آلياً عبر منصة MadarCore ERP</span>
             </div>
           </div>
         </div>

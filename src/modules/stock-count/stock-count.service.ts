@@ -699,6 +699,7 @@ export class StockCountService {
 
           medicine = await tx.medicine.create({
             data: {
+              companyId: stockCount.companyId,
               code,
               barcode: medicineBarcode,
               tradeName: dto.tradeName.trim(),

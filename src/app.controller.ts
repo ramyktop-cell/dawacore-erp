@@ -11,7 +11,7 @@ export class AppController {
   getHealth() {
     return {
       status: 'ok',
-      service: 'DawaCore Pharmacy ERP',
+      service: 'MadarCore ERP',
       timestamp: new Date().toISOString(),
     };
   }

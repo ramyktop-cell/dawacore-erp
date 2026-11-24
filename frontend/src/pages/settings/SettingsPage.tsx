@@ -470,21 +470,22 @@ export const SettingsPage: React.FC = () => {
               نوع النشاط التجاري (Business Mode):
             </label>
             <p className="text-xs text-slate-500 mb-3.5">
-              يُعدّل مسميات الشاشات والوحدات تلقائياً في كافة أنحاء النظام (صيدلية • سوبر ماركت • شركة تجارية)
+              يُعدّل مسميات الشاشات والوحدات تلقائياً في كافة أنحاء النظام (صيدلية • سوبر ماركت • شركة تجارية • معرض ملابس)
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {(Object.values(BUSINESS_PROFILES) as Array<(typeof BUSINESS_PROFILES)[BusinessType]>).map(
                 (profile) => {
-                  const currentType = (getVal(['businessType', 'BUSINESS_TYPE'], 'PHARMACY') ||
+                  const currentType = (getVal(['businessType', 'BUSINESS_TYPE'], getBusinessType()) ||
                     'PHARMACY') as BusinessType;
+                  const savedType = getBusinessType();
                   const isSelected = currentType === profile.type;
+                  const isSaved = savedType === profile.type;
                   return (
                     <button
                       key={profile.type}
                       type="button"
                       onClick={() => {
                         setVal('businessType', profile.type);
-                        setBusinessType(profile.type);
                       }}
                       className={`p-4 rounded-xl border-2 text-right transition flex items-start gap-3 cursor-pointer ${
                         isSelected
@@ -498,7 +499,7 @@ export const SettingsPage: React.FC = () => {
                           <span>{profile.labelAr}</span>
                           {isSelected && (
                             <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#00A8A8] text-white font-bold">
-                              مُفعّل
+                              {isSaved ? 'مُفعّل' : 'معاينة'}
                             </span>
                           )}
                         </div>
@@ -513,6 +514,27 @@ export const SettingsPage: React.FC = () => {
                 },
               )}
             </div>
+            {(() => {
+              const previewType = (getVal(['businessType', 'BUSINESS_TYPE'], getBusinessType()) ||
+                'PHARMACY') as BusinessType;
+              const previewProfile = BUSINESS_PROFILES[previewType] || BUSINESS_PROFILES.PHARMACY;
+              const savedType = getBusinessType();
+              return (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-600">
+                  <div>
+                    <span className="font-bold text-[#582949]">معاينة مصطلحات النشاط المختار: </span>
+                    <span>{previewProfile.catalogMenuTitle}</span>
+                    <span className="mx-1.5 text-slate-300">•</span>
+                    <span>حقل التعريف: {previewProfile.scientificNameLabel}</span>
+                  </div>
+                  {previewType !== savedType && (
+                    <span className="font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-lg">
+                      اضغط «حفظ التعديلات» لاعتماد تغيير النشاط في المنظومة
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           <h2 className="text-base font-bold text-[#582949] mb-4 flex items-center gap-2">
@@ -523,7 +545,7 @@ export const SettingsPage: React.FC = () => {
               <label className="block text-xs font-bold text-slate-700 mb-1">اسم النظام / التطبيق</label>
               <input
                 type="text"
-                value={getVal(['systemName', 'SYSTEM_NAME'], 'DawaCore Pharmacy')}
+                value={getVal(['systemName', 'SYSTEM_NAME'], 'MadarCore ERP')}
                 onChange={(e) => setVal('systemName', e.target.value)}
                 className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm font-medium focus:border-[#582949] focus:outline-none"
               />
@@ -563,7 +585,7 @@ export const SettingsPage: React.FC = () => {
                 type="text"
                 value={getVal(['reportHeaderText', 'REPORT_HEADER_TEXT'])}
                 onChange={(e) => setVal('reportHeaderText', e.target.value)}
-                placeholder="مثال: مجموعة صيدليات داواكور العالمية"
+                placeholder="مثال: اسم الشركة أو المؤسسة في ترويسة التقارير"
                 className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm font-medium focus:border-[#582949] focus:outline-none"
               />
             </div>

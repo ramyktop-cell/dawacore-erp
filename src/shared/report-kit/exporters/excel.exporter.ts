@@ -23,7 +23,7 @@ export class ExcelExporter {
     const start = Date.now();
     const workbook = new ExcelJS.Workbook();
 
-    workbook.creator = 'DawaCore ERP';
+    workbook.creator = 'MadarCore ERP';
     workbook.created = new Date();
     workbook.modified = new Date();
     workbook.properties.date1904 = false;
@@ -205,7 +205,7 @@ export class ExcelExporter {
 
     ws.mergeCells(footerRowNumber, 1, footerRowNumber, colCount);
     const footerCell = ws.getCell(footerRowNumber, 1);
-    footerCell.value = `تم الإنشاء بواسطة DawaCore ERP — ${this.formatDate(meta.generatedAt)} — ${meta.generatedBy.name}`;
+    footerCell.value = `تم الإنشاء بواسطة ${meta.companyName || 'MadarCore ERP'} — ${this.formatDate(meta.generatedAt)} — ${meta.generatedBy.name}`;
     footerCell.font = {
       size: 9,
       italic: true,

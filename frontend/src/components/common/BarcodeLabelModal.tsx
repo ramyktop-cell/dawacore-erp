@@ -5,6 +5,7 @@ import {
   BarcodeLabelSize,
   generateCode128Svg,
 } from '../../services/printer.service';
+import { getActiveCompanyBrand } from '../../utils/platform-brand';
 
 export interface BarcodeLabelModalProps {
   isOpen: boolean;
@@ -37,7 +38,7 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
   const [customPrice, setCustomPrice] = useState<string>('');
   const [batchNumber, setBatchNumber] = useState<string>('');
   const [expiryDate, setExpiryDate] = useState<string>('');
-  const [pharmacyName, setPharmacyName] = useState<string>('مجموعة صيدليات DawaCore');
+  const [pharmacyName, setPharmacyName] = useState<string>(() => getActiveCompanyBrand().displayNameAr);
   const [showPrice, setShowPrice] = useState<boolean>(true);
   const [showExpiry, setShowExpiry] = useState<boolean>(true);
   const [showPharmacyName, setShowPharmacyName] = useState<boolean>(true);
@@ -141,7 +142,7 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
           <div className="bg-white text-black border border-slate-300 rounded-md shadow-md px-4 py-2.5 w-64 flex flex-col items-center justify-between space-y-1">
             {showPharmacyName && (
               <div className="text-[10px] font-extrabold border-b border-black/80 w-full text-center pb-0.5 truncate">
-                {pharmacyName || 'صيدلية DawaCore'}
+                {pharmacyName || getActiveCompanyBrand().displayNameAr}
               </div>
             )}
             <div className="text-xs font-black text-center truncate w-full">

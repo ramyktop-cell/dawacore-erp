@@ -1,6 +1,6 @@
 # ==============================================================================
-# Render.com Blueprint (Infrastructure as Code) for DawaCore ERP
-# Deploy with Free Web Service on Render + Free Permanent PostgreSQL on Neon.tech
+# Render.com Blueprint (Infrastructure as Code) for MadarCore ERP Preview
+# Deploy with Web Service on Render + Managed PostgreSQL
 # ==============================================================================
 services:
   - type: web
@@ -14,6 +14,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: DEPLOYMENT_MODE
+        value: CLOUD
       - key: HOST
         value: 0.0.0.0
       - key: PORT
@@ -24,18 +26,12 @@ services:
         generateValue: true
       - key: JWT_EXPIRATION
         value: 1d
+      - key: AUTO_SYNC_SCHEMA
+        value: "false"
       - key: AUTO_BOOTSTRAP
-        value: "true"
+        value: "false"
       - key: AUTO_ACTIVATE_CLOUD_LICENSE
         value: "true"
-      - key: BOOTSTRAP_COMPANY_NAME
-        value: صيدلية دواء كور
-      - key: BOOTSTRAP_BRANCH_NAME
-        value: الفرع الرئيسي
-      - key: BOOTSTRAP_USERNAME
-        value: admin
-      - key: BOOTSTRAP_PASSWORD
-        value: "123456"
       - key: PUPPETEER_SKIP_DOWNLOAD
         value: "true"
       - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD

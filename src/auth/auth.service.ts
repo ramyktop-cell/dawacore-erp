@@ -1,17 +1,36 @@
 import { Injectable, UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import * as bcrypt from 'bcryptjs';
 import { ChangePasswordDto, LoginDto, VerifyPinDto } from './dto/auth.dto';
 import { Role } from '@prisma/client';
 import { credentialVersion } from './security.config';
 import { AuthenticatedUser } from './security.policy';
 
+export const ALLOWED_BUSINESS_TYPES = [
+  'PHARMACY',
+  'SUPERMARKET',
+  'TRADING',
+  'CLOTHING',
+] as const;
+
+export type SupportedBusinessType = (typeof ALLOWED_BUSINESS_TYPES)[number];
+
+export function normalizeBusinessType(raw?: string | null): SupportedBusinessType {
+  const normalized = (raw || '').trim().toUpperCase();
+  if ((ALLOWED_BUSINESS_TYPES as readonly string[]).includes(normalized)) {
+    return normalized as SupportedBusinessType;
+  }
+  return 'PHARMACY';
+}
+
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly auditService: AuditService,
   ) {}
 
   private async matchingUsers(username: string, password: string, companyId?: string) {
@@ -68,6 +87,24 @@ export class AuthService {
     if (!credentials.companyId && matches.length > 1) return this.companySelection(matches);
     const user = matches[0];
 
+    let rawBusinessType: string | null = null;
+    if (user.companyId && this.prisma.companySetting) {
+      const settings = await this.prisma.companySetting.findMany({
+        where: {
+          companyId: user.companyId,
+          key: { in: ['businessType', 'BUSINESS_TYPE'] },
+        },
+        select: { key: true, value: true },
+      });
+      const exactMatch = settings.find((s) => s.key === 'businessType');
+      const fallbackMatch = settings.find((s) => s.key === 'BUSINESS_TYPE');
+      rawBusinessType = exactMatch?.value ?? fallbackMatch?.value ?? null;
+    }
+
+    const businessType = normalizeBusinessType(rawBusinessType);
+    const companyName = user.company?.name || null;
+    const companyLogoUrl = user.company?.logoUrl || null;
+
     const payload = {
       sub: user.id,
       cv: credentialVersion(user.passwordHash),
@@ -75,14 +112,16 @@ export class AuthService {
       name: user.name,
       fullName: user.name,
       companyId: user.companyId,
-      companyName: user.company?.name,
+      companyName,
+      companyLogoUrl,
+      businessType,
       branchId: user.branchId,
       branchName: user.branch?.name || null,
       role: user.role,
       roles: [user.role],
     };
 
-    return {
+    const responseData = {
       accessToken: this.jwtService.sign(payload),
       user: {
         id: user.id,
@@ -92,13 +131,33 @@ export class AuthService {
         email: user.email,
         phone: user.phone,
         companyId: user.companyId,
-        companyName: user.company?.name,
+        companyName,
+        companyLogoUrl,
+        businessType,
         branchId: user.branchId,
         branchName: user.branch?.name || null,
         role: user.role,
         roles: [user.role],
       },
     };
+
+    // تسجيل الدخول في سجل الرقابة
+    await this.auditService.log({
+      companyId: user.companyId,
+      branchId: user.branchId ?? undefined,
+      userId: user.id,
+      action: 'USER_LOGIN',
+      entityType: 'تسجيل الدخول',
+      entityId: user.id,
+      changes: {
+        userName: user.name,
+        userRole: user.role,
+        actionLabel: 'تسجيل دخول',
+        summary: `قام المستخدم (${user.name}) بتسجيل الدخول للنظام بنجاح`,
+      },
+    });
+
+    return responseData;
   }
 
   /**

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ShieldAlert, ShieldCheck, Copy, Check, KeyRound, Laptop, Sparkles, Building2, Calendar } from 'lucide-react';
 import { licensingApi, LicenseStatus } from '../api/licensing';
+import { usePlatformBrand } from '../hooks/usePlatformBrand';
 
 interface Props {
   initialStatus: LicenseStatus;
@@ -8,6 +9,8 @@ interface Props {
 }
 
 export const ActivationPage: React.FC<Props> = ({ initialStatus, onActivated }) => {
+  const { platform, deploymentBadgeText, brandCssVars } = usePlatformBrand();
+  const [logoError, setLogoError] = useState(false);
   const [licenseKey, setLicenseKey] = useState('');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -15,6 +18,10 @@ export const ActivationPage: React.FC<Props> = ({ initialStatus, onActivated }) 
   const [successInfo, setSuccessInfo] = useState<LicenseStatus | null>(
     initialStatus.isActivated ? initialStatus : null
   );
+
+  useEffect(() => {
+    setLogoError(false);
+  }, [platform.platformLogoUrl]);
 
   const hwid = initialStatus.hwid || 'جاري استخراج كود الجهاز...';
 
@@ -54,25 +61,67 @@ export const ActivationPage: React.FC<Props> = ({ initialStatus, onActivated }) 
   };
 
   return (
-    <div className="min-h-screen w-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-[#1e1b4b] to-slate-950 p-4 font-sans text-slate-100" dir="rtl">
+    <div
+      className="min-h-screen w-screen flex items-center justify-center p-4 font-sans text-slate-100"
+      dir="rtl"
+      style={{
+        ...brandCssVars,
+        background: `linear-gradient(135deg, #0f172a, ${platform.primaryColor}, #020617)`,
+      }}
+    >
       <div className="w-full max-w-xl bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
-        
         {/* Glow effect */}
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-violet-600/30 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-teal-500/20 rounded-full blur-3xl pointer-events-none" />
+        <div
+          className="absolute -top-24 -right-24 w-64 h-64 rounded-full blur-3xl pointer-events-none opacity-30"
+          style={{ backgroundColor: platform.primaryColor }}
+        />
+        <div
+          className="absolute -bottom-24 -left-24 w-64 h-64 rounded-full blur-3xl pointer-events-none opacity-25"
+          style={{ backgroundColor: platform.secondaryColor }}
+        />
 
         {/* Header */}
         <div className="text-center relative z-10">
+          <div className="mb-3 flex justify-center">
+            <span
+              className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold text-white border"
+              style={{ borderColor: platform.secondaryColor }}
+            >
+              {deploymentBadgeText}
+            </span>
+          </div>
           <div className="inline-block relative mb-3">
-            <img
-              src="/logo.png"
-              alt="DawaCore Logo"
-              className="w-20 h-20 rounded-2xl mx-auto shadow-2xl border-2 border-white/20 object-cover"
-            />
+            {!logoError && platform.platformLogoUrl ? (
+              <img
+                src={platform.platformLogoUrl || '/logo.png'}
+                alt={`${platform.platformName || 'MadarCore'} Logo`}
+                onError={() => setLogoError(true)}
+                className="w-20 h-20 rounded-2xl mx-auto shadow-2xl border-2 object-cover"
+                style={{ borderColor: platform.secondaryColor }}
+              />
+            ) : (
+              <div
+                className="w-20 h-20 rounded-2xl mx-auto shadow-2xl border-2 flex items-center justify-center text-white text-3xl font-black"
+                style={{
+                  backgroundColor: platform.primaryColor,
+                  borderColor: platform.secondaryColor,
+                }}
+              >
+                {(platform.platformName || 'MadarCore').charAt(0).toUpperCase()}
+              </div>
+            )}
           </div>
           <h1 className="text-2xl font-black tracking-tight text-white flex items-center justify-center gap-2">
-            <span>تفعيل نظام DawaCore</span>
-            <span className="text-xs bg-violet-500/40 text-violet-200 px-2 py-0.5 rounded-md font-mono border border-violet-400/30">v1.0</span>
+            <span>تفعيل منصة {platform.platformName || 'MadarCore'}</span>
+            <span
+              className="text-xs text-white px-2 py-0.5 rounded-md font-mono border"
+              style={{
+                backgroundColor: platform.primaryColor,
+                borderColor: platform.secondaryColor,
+              }}
+            >
+              v1.0
+            </span>
           </h1>
           <p className="text-sm text-slate-300 mt-1">
             النظام محمي ومربوط بعتاد هذا الجهاز حصرياً لضمان أمان بياناتك
@@ -85,22 +134,30 @@ export const ActivationPage: React.FC<Props> = ({ initialStatus, onActivated }) 
             <Laptop size={16} />
             <span>الخطوة 1: كود تعريف هذا الجهاز (Hardware ID)</span>
           </div>
-          
+
           <div className="flex items-center justify-between gap-3 bg-black/40 border border-slate-700 rounded-xl px-4 py-3">
-            <span className="font-mono text-base font-bold tracking-widest text-teal-300 select-all" dir="ltr">
+            <span
+              className="font-mono text-base font-bold tracking-widest select-all"
+              dir="ltr"
+              style={{ color: platform.secondaryColor }}
+            >
               {hwid}
             </span>
             <button
               type="button"
               onClick={handleCopyHwid}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/30 hover:bg-violet-600/50 border border-violet-400/30 text-violet-200 text-xs font-medium transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-white text-xs font-medium transition hover:opacity-90"
+              style={{
+                backgroundColor: platform.primaryColor,
+                borderColor: platform.secondaryColor,
+              }}
             >
               {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
               {copied ? 'تم النسخ!' : 'نسخ الكود'}
             </button>
           </div>
           <p className="text-xs text-slate-400 mt-2">
-            ℹ️ انسخ هذا الكود وأرسله للمطور للحصول على مفتاح التفعيل الخاص بصيدليتك.
+            ℹ️ انسخ هذا الكود وأرسله للمطور للحصول على مفتاح التفعيل الخاص بمنشأتك.
           </p>
         </div>
 
@@ -117,7 +174,8 @@ export const ActivationPage: React.FC<Props> = ({ initialStatus, onActivated }) 
               placeholder="الصق المفتاح المشفر المرسل لك من المطور..."
               rows={3}
               dir="ltr"
-              className="w-full rounded-xl bg-black/40 border border-slate-700 p-3 text-xs font-mono text-slate-200 placeholder:text-slate-500 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none resize-none transition"
+              className="w-full rounded-xl bg-black/40 border border-slate-700 p-3 text-xs font-mono text-slate-200 placeholder:text-slate-500 outline-none resize-none transition"
+              style={licenseKey ? { borderColor: platform.secondaryColor } : undefined}
             />
           </div>
 
@@ -152,7 +210,10 @@ export const ActivationPage: React.FC<Props> = ({ initialStatus, onActivated }) 
           <button
             type="submit"
             disabled={loading || !licenseKey.trim() || !!successInfo?.isActivated}
-            className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-sm text-white shadow-lg shadow-violet-600/30 flex items-center justify-center gap-2 transition-all transform active:scale-[0.99]"
+            className="w-full py-3.5 px-6 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed font-bold text-sm text-white shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-[0.99]"
+            style={{
+              background: `linear-gradient(90deg, ${platform.primaryColor}, ${platform.secondaryColor})`,
+            }}
           >
             {loading ? (
               'جاري التحقق والتفعيل...'
@@ -172,9 +233,8 @@ export const ActivationPage: React.FC<Props> = ({ initialStatus, onActivated }) 
 
         {/* Footer */}
         <div className="text-center text-[11px] text-slate-400 mt-6 border-t border-white/10 pt-4 relative z-10">
-          نظام DawaCore لإدارة الصيدليات والمخازن • جميع الحقوق محفوظة 2026
+          منصة {platform.platformName || 'MadarCore'} ({platform.platformNameAr || 'مدار كور'}) لإدارة الأعمال والمخازن • جميع الحقوق محفوظة 2026
         </div>
-
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 // frontend/src/utils/permissions.ts
+import { useAuthStore } from '../stores/auth.store';
 
 export type AppRole =
   | 'SUPER_ADMIN'
@@ -30,9 +31,15 @@ export interface StoredUser {
   branchName?: string | null;
   companyId?: string;
   companyName?: string | null;
+  companyLogoUrl?: string | null;
+  businessType?: string;
 }
 
 export function getCurrentUser(): StoredUser | null {
+  const storeUser = useAuthStore.getState().user;
+  if (storeUser) {
+    return storeUser as unknown as StoredUser;
+  }
   try {
     const raw = localStorage.getItem('dawacore_user');
     if (!raw) return null;
@@ -65,7 +72,8 @@ export function getDefaultRouteForRole(role?: string | null): string {
 }
 
 export function logoutUser() {
-  localStorage.removeItem('dawacore_token');
-  localStorage.removeItem('dawacore_user');
-  window.location.href = '/login';
+  useAuthStore.getState().logout();
+  if (typeof window !== 'undefined' && window.location) {
+    window.location.href = '/login';
+  }
 }

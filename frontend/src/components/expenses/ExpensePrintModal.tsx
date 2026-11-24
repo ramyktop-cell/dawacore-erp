@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Expense, expensesApi } from '../../api/expenses';
+import { getActiveCompanyBrand } from '../../utils/platform-brand';
 
 interface ExpensePrintModalProps {
   isOpen: boolean;
@@ -42,7 +43,7 @@ export const ExpensePrintModal: React.FC<ExpensePrintModalProps> = ({
   const displayCompanyName =
     companyName ||
     (expense as any).company?.name ||
-    'مجموعة صيدليات داواكور';
+    getActiveCompanyBrand().displayNameAr;
 
   const handleOpenPdfForPrint = async () => {
     try {
@@ -279,7 +280,7 @@ export const ExpensePrintModal: React.FC<ExpensePrintModalProps> = ({
 
           {/* Footer */}
           <div className="mt-8 pt-3 border-t border-slate-100 flex justify-between items-center text-[10px] text-slate-400 font-mono">
-            <span>نظام DawaCore ERP & POS المحاسبي</span>
+            <span>منصة MadarCore ERP & POS المحاسبية</span>
             <span>تاريخ العرض: {new Date().toLocaleString('ar-EG')}</span>
           </div>
         </div>

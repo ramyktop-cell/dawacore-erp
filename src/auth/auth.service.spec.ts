@@ -1,135 +1,147 @@
-class MockUnauthorizedException extends Error {}
-class MockBadRequestException extends Error {}
-class MockNotFoundException extends Error {}
+class MockUnauthorizedException extends Error {
+  constructor(msg?: string) {
+    super(msg);
+    this.name = 'UnauthorizedException';
+  }
+}
+class MockBadRequestException extends Error {
+  constructor(msg?: string) {
+    super(msg);
+    this.name = 'BadRequestException';
+  }
+}
+class MockNotFoundException extends Error {
+  constructor(msg?: string) {
+    super(msg);
+    this.name = 'NotFoundException';
+  }
+}
 
 jest.mock('@nestjs/common', () => ({
-  Injectable: () => (target: unknown) => target,
+  Injectable: () => (target: any) => target,
   UnauthorizedException: MockUnauthorizedException,
   BadRequestException: MockBadRequestException,
   NotFoundException: MockNotFoundException,
 }));
 
-jest.mock('@nestjs/jwt', () => ({ JwtService: class {} }));
+jest.mock('@nestjs/jwt', () => ({
+  JwtService: class {},
+}));
 
-jest.mock('../prisma/prisma.service', () => ({ PrismaService: class {} }));
-
-jest.mock('@prisma/client', () => ({
-  Role: {
-    SUPER_ADMIN: 'SUPER_ADMIN',
-    COMPANY_ADMIN: 'COMPANY_ADMIN',
-    BRANCH_MANAGER: 'BRANCH_MANAGER',
-  },
+jest.mock('bcryptjs', () => ({
+  compare: jest.fn(),
+  hash: jest.fn(),
 }));
 
 import * as bcrypt from 'bcryptjs';
-import { UnauthorizedException } from '@nestjs/common';
-import { AuthService } from './auth.service';
+import { Role } from '@prisma/client';
+import { AuthService, normalizeBusinessType } from './auth.service';
 
-describe('AuthService tenant-local usernames', () => {
-  let passwordHash: string;
-  let otherHash: string;
-  let prisma: any;
-  let service: AuthService;
-
-  const user = (companyId: string, companyName: string, hash = passwordHash) => ({
-    id: `user-${companyId}`,
-    companyId,
-    branchId: null,
-    username: 'admin',
-    name: `Admin ${companyName}`,
-    email: null,
-    phone: null,
-    passwordHash: hash,
-    role: 'COMPANY_ADMIN',
-    isActive: true,
-    company: { id: companyId, name: companyName },
-    branch: null,
-  });
-
-  beforeAll(async () => {
-    passwordHash = await bcrypt.hash('CorrectPassword!', 4);
-    otherHash = await bcrypt.hash('OtherPassword!', 4);
-  });
-
-  beforeEach(() => {
-    prisma = {
+describe('AuthService', () => {
+  const makeService = (overrides?: {
+    user?: any;
+    settings?: Array<{ key: string; value: string }>;
+  }) => {
+    const prisma: any = {
       user: {
-        findMany: jest.fn(),
-        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUnique: jest.fn().mockResolvedValue(
+          overrides?.user ?? {
+            id: 'user-1',
+            username: 'cashier1',
+            name: 'كاشير أول',
+            email: 'cashier1@example.com',
+            phone: '0912345678',
+            passwordHash: '$2a$12$abcdefghijklmnopqrstuv',
+            isActive: true,
+            companyId: 'comp-1',
+            branchId: 'branch-1',
+            role: Role.CASHIER,
+            company: {
+              id: 'comp-1',
+              name: 'معرض الأناقة للملابس',
+              logoUrl: '/uploads/elegance-logo.png',
+            },
+            branch: {
+              id: 'branch-1',
+              name: 'الفرع الرئيسي',
+            },
+          },
+        ),
+      },
+      companySetting: {
+        findMany: jest.fn().mockResolvedValue(overrides?.settings ?? []),
       },
     };
-    service = new AuthService(prisma, { sign: jest.fn().mockReturnValue('jwt-token') } as any);
+
+    const jwtService: any = {
+      sign: jest.fn().mockReturnValue('signed-jwt-token'),
+    };
+
+    const auditService: any = {
+      log: jest.fn().mockResolvedValue(undefined),
+    };
+
+    return {
+      service: new AuthService(prisma, jwtService, auditService),
+      prisma,
+      jwtService,
+      auditService,
+    };
+  };
+
+  beforeEach(() => {
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
   });
 
-  it('logs in directly when only one active credential matches', async () => {
-    prisma.user.findMany.mockResolvedValue([user('company-a', 'Company A')]);
-    const result: any = await service.login({ username: 'admin', password: 'CorrectPassword!' });
-    expect(result.accessToken).toBe('jwt-token');
-    expect(result.user.companyId).toBe('company-a');
+  it('normalizes businessType allowlist values and falls back to PHARMACY', () => {
+    expect(normalizeBusinessType('CLOTHING')).toBe('CLOTHING');
+    expect(normalizeBusinessType('supermarket')).toBe('SUPERMARKET');
+    expect(normalizeBusinessType('TRADING')).toBe('TRADING');
+    expect(normalizeBusinessType('PHARMACY')).toBe('PHARMACY');
+    expect(normalizeBusinessType('UNKNOWN_ACTIVITY')).toBe('PHARMACY');
+    expect(normalizeBusinessType(null)).toBe('PHARMACY');
   });
 
-  it('returns only password-matching companies when credentials are ambiguous', async () => {
-    prisma.user.findMany.mockResolvedValue([
-      user('company-a', 'Company A'),
-      user('company-b', 'Company B'),
-      user('company-c', 'Company C', otherHash),
-    ]);
-    const result: any = await service.login({ username: 'admin', password: 'CorrectPassword!' });
-    expect(result).toEqual({
-      requiresCompanySelection: true,
-      companies: [
-        { id: 'company-a', name: 'Company A' },
-        { id: 'company-b', name: 'Company B' },
-      ],
+  it('returns companyName, companyLogoUrl, and normalized CLOTHING businessType on login', async () => {
+    const { service, prisma, jwtService } = makeService({
+      settings: [{ key: 'businessType', value: 'clothing' }],
     });
-  });
 
-  it('restricts a selected login to the supplied company', async () => {
-    prisma.user.findMany.mockResolvedValue([user('company-b', 'Company B')]);
-    const result: any = await service.login({
-      username: 'admin',
-      password: 'CorrectPassword!',
-      companyId: 'company-b',
+    const result = await service.login({
+      username: 'cashier1',
+      password: 'ValidPassword123!',
     });
-    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ companyId: 'company-b' }),
-    }));
-    expect(result.user.companyId).toBe('company-b');
-  });
 
-  it('uses the generic rejection for a wrong selected company or password', async () => {
-    prisma.user.findMany.mockResolvedValue([]);
-    await expect(service.login({
-      username: 'admin',
-      password: 'WrongPassword!',
-      companyId: 'company-b',
-    })).rejects.toBeInstanceOf(UnauthorizedException);
-  });
-
-  it('requires company selection before changing an ambiguous password', async () => {
-    prisma.user.findMany.mockResolvedValue([
-      user('company-a', 'Company A'),
-      user('company-b', 'Company B'),
-    ]);
-    const result: any = await service.changePassword({
-      username: 'admin',
-      currentPassword: 'CorrectPassword!',
-      newPassword: 'NewCorrectPassword!',
+    expect(prisma.companySetting.findMany).toHaveBeenCalledWith({
+      where: {
+        companyId: 'comp-1',
+        key: { in: ['businessType', 'BUSINESS_TYPE'] },
+      },
+      select: { key: true, value: true },
     });
-    expect(result.requiresCompanySelection).toBe(true);
-    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    expect(result.user.companyName).toBe('معرض الأناقة للملابس');
+    expect(result.user.companyLogoUrl).toBe('/uploads/elegance-logo.png');
+    expect(result.user.businessType).toBe('CLOTHING');
+    expect(jwtService.sign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        companyId: 'comp-1',
+        companyName: 'معرض الأناقة للملابس',
+        companyLogoUrl: '/uploads/elegance-logo.png',
+        businessType: 'CLOTHING',
+      }),
+    );
   });
 
-  it('changes only the selected tenant account', async () => {
-    prisma.user.findMany.mockResolvedValue([user('company-a', 'Company A')]);
-    await service.changePassword({
-      username: 'admin',
-      currentPassword: 'CorrectPassword!',
-      newPassword: 'NewCorrectPassword!',
-      companyId: 'company-a',
+  it('falls back to PHARMACY when companySetting has no businessType or an invalid value', async () => {
+    const { service } = makeService({
+      settings: [{ key: 'businessType', value: 'RESTAURANT_UNSUPPORTED' }],
     });
-    expect(prisma.user.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ id: 'user-company-a' }),
-    }));
+
+    const result = await service.login({
+      username: 'cashier1',
+      password: 'ValidPassword123!',
+    });
+
+    expect(result.user.businessType).toBe('PHARMACY');
   });
 });

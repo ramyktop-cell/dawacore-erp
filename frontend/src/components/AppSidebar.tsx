@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { getCurrentUser, getUserRole, hasPermission, ROLE_LABELS, logoutUser } from '../utils/permissions';
 import { getBusinessTerminology, BusinessTerminology } from '../utils/business-terminology';
+import { usePlatformBrand } from '../hooks/usePlatformBrand';
 
 interface SubItem {
   title: string;
@@ -27,6 +28,7 @@ interface AppSidebarProps {
 export const AppSidebar: React.FC<AppSidebarProps> = ({ mobileOpen = false, onMobileClose }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [terms, setTerms] = useState<BusinessTerminology>(() => getBusinessTerminology());
+  const { companyBrand } = usePlatformBrand();
   const userObj = getCurrentUser();
   const userRole = getUserRole();
   const [openSubMenus, setOpenSubMenus] = useState<Record<string, boolean>>({
@@ -252,20 +254,20 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ mobileOpen = false, onMo
       {/* Brand Header */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-white/10 bg-black/10">
         {!isCollapsed && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <img
-              src="/logo.png"
-              alt="DawaCore Logo"
-              className="w-9 h-9 rounded-xl object-cover shadow-lg border border-white/20"
+              src={companyBrand.logoUrl || '/logo.png'}
+              alt={`${companyBrand.displayName} Logo`}
+              className="w-9 h-9 rounded-xl object-cover shadow-lg border border-white/20 shrink-0"
             />
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <h1 className="font-black text-sm tracking-wide text-white leading-tight">
-                  DawaCore
+                <h1 className="font-black text-sm tracking-wide text-white leading-tight truncate">
+                  {companyBrand.displayName}
                 </h1>
-                <span className="text-[9px] bg-[#00A8A8] text-white px-1.5 py-0.2 rounded font-bold">v1.0</span>
+                <span className="text-[9px] bg-[#00A8A8] text-white px-1.5 py-0.2 rounded font-bold shrink-0">v1.0</span>
               </div>
-              <p className="text-[10px] text-[#00A8A8] font-medium leading-tight">
+              <p className="text-[10px] text-[#00A8A8] font-medium leading-tight truncate">
                 {terms.labelAr}
               </p>
             </div>
@@ -274,8 +276,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ mobileOpen = false, onMo
 
         {isCollapsed && (
           <img
-            src="/logo.png"
-            alt="DawaCore Logo"
+            src={companyBrand.logoUrl || '/logo.png'}
+            alt={`${companyBrand.displayName} Logo`}
             className="w-9 h-9 rounded-xl object-cover shadow-lg mx-auto border border-white/20"
           />
         )}

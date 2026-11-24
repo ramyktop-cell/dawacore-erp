@@ -78,7 +78,7 @@ export const ShiftsPage: React.FC = () => {
   const handlePrintZReport = (shift: any) => {
     if (!shift) return;
     ThermalPrinterService.printShiftReport({
-      companyName: 'مجموعة صيدليات وسوبر ماركت DawaCore',
+      companyName: shift.branch?.company?.name || currentUser?.companyName || 'MadarCore',
       branchName: shift.branch?.name || 'الفرع الرئيسي',
       shiftNumber: shift.shiftNumber,
       cashierName: shift.user?.name || shift.user?.username || 'الكاشير',

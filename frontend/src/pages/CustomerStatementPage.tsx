@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { usePlatformBrand } from '../hooks/usePlatformBrand';
 
 interface CustomerOption {
   id: string;
@@ -9,6 +10,7 @@ interface CustomerOption {
 }
 
 export const CustomerStatementPage: React.FC = () => {
+  const { companyBrand } = usePlatformBrand();
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
@@ -106,7 +108,8 @@ export const CustomerStatementPage: React.FC = () => {
 
   const handleWhatsAppShare = () => {
     if (!statement) return;
-    const text = `*كشف حساب صيدلية DawaCore*%0A` +
+    const headerCompanyName = statement.customer?.company?.name || companyBrand.displayNameAr;
+    const text = `*كشف حساب - ${headerCompanyName}*%0A` +
       `*العميل:* ${statement.customer.name}%0A` +
       `*الفترة من:* ${statement.period.from} *إلى:* ${statement.period.to}%0A` +
       `*الرصيد الافتتاحي:* ${statement.openingBalance} ج.س%0A` +
@@ -125,7 +128,7 @@ export const CustomerStatementPage: React.FC = () => {
             📊
           </div>
           <div>
-            <h1 className="text-lg font-black tracking-wide">DawaCore | التقارير المالية والذمم</h1>
+            <h1 className="text-lg font-black tracking-wide">{companyBrand.displayName} | التقارير المالية والذمم</h1>
             <p className="text-xs text-white/70">كشف حساب العملاء التفصيلي (CSTDTLST) والأرصدة التراكمية</p>
           </div>
         </div>
@@ -220,7 +223,9 @@ export const CustomerStatementPage: React.FC = () => {
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm print:border-none print:shadow-none print:p-0">
           {/* ترويسة رسمية للطباعة الورقية فقط */}
           <div className="hidden print:block mb-6 text-center border-b-2 border-slate-800 pb-4">
-            <h1 className="text-2xl font-black text-slate-900">مجموعة صيدليات داواكور العالمية</h1>
+            <h1 className="text-2xl font-black text-slate-900">
+              {statement.customer?.company?.name || companyBrand.displayNameAr}
+            </h1>
             <h2 className="text-base font-bold text-slate-700 mt-1">كشف حساب عميل تفصيلي (CSTDTLST)</h2>
             <div className="mt-2 text-xs text-slate-600 flex justify-between px-2">
               <span>العميل: <strong className="font-bold text-black">{statement.customer.name}</strong></span>

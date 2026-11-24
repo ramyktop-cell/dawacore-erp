@@ -1,8 +1,9 @@
 import { getCurrentUser } from '../../utils/permissions';
 import { apiFetch, downloadReport } from '../../api/http';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { usePosStore } from '../../stores/pos.store';
 import { ThermalPrinterService } from '../../services/printer.service';
+import { offlinePosEngine, offlinePosPreviewEnabled } from '../../services/offline-pos.service';
 import { customersApi, Customer } from '../../api/customers';
 import { CustomerLedgerModal } from '../customers/CustomerLedgerModal';
 
@@ -41,7 +42,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose }) =
   const [cardAmount, setCardAmount] = useState<string>(grandTotal.toFixed(2));
   const [bankReference, setBankReference] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const submitting = useRef(false);
   const [invoiceOutput, setInvoiceOutput] = useState<'PDF' | 'THERMAL'>('PDF');
+
+  useEffect(() => {
+    if (isOpen && offlinePosPreviewEnabled && offlinePosEngine.isEffectivelyOffline() && !customer) {
+      setActiveMethodTab('CASH');
+    }
+  }, [isOpen, customer]);
 
   // مزامنة العميل المحدد من شاشة الـ POS
   useEffect(() => {
@@ -103,6 +111,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose }) =
     currentDebt + grandTotal > creditLimit;
 
   const handleExecutePayment = async () => {
+    if (submitting.current) return;
     if (!branchId || !cashierId || !activeShiftId || activeShiftId === 'OPEN_SHIFT') {
       alert('يجب تسجيل الدخول وفتح وردية فعالة قبل إتمام البيع');
       return;
@@ -122,6 +131,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose }) =
       return;
     }
 
+    submitting.current = true;
     setIsSubmitting(true);
     try {
       const payments = [];
@@ -153,6 +163,40 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose }) =
           amount: Number(p.amount).toString(),
         })),
       };
+
+      if (offlinePosPreviewEnabled && offlinePosEngine.isEffectivelyOffline()) {
+        if (activeMethodTab !== 'CASH') throw new Error('المعاينة الأوفلاين تدعم البيع النقدي فقط');
+        const user = getCurrentUser();
+        const receipt = {
+          customerName: '',
+          cashierName: user?.name || user?.username || '',
+          paymentMethod: PaymentMethod.CASH,
+          grandTotal: grandTotal.toFixed(2),
+          paidAmount: totalPaid.toFixed(2),
+          changeAmount: remaining.toFixed(2),
+          items: items.map((item) => ({
+            tradeName: item.tradeName,
+            unitLabel: item.isWeighed ? 'كجم' : undefined,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice,
+          })),
+        };
+        const saved = await offlinePosEngine.enqueueOfflineSale(payload, receipt);
+        clearCart();
+        onClose();
+        try {
+          await ThermalPrinterService.printInvoice({
+            ...receipt,
+            companyName: user?.companyName || undefined,
+            branchName: user?.branchName || 'الفرع',
+            invoiceNumber: saved.offlineInvoiceNumber,
+          });
+        } catch {
+          alert(`الفاتورة ${saved.offlineInvoiceNumber} محفوظة. تعذرت الطباعة؛ يمكنك إعادة طباعتها من قائمة الفواتير الأوفلاين.`);
+        }
+        return;
+      }
 
       const res = await apiFetch('/api/sales/create', {
         method: 'POST',
@@ -196,6 +240,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose }) =
     } catch (err: any) {
       alert(`خطأ: ${err.message}`);
     } finally {
+      submitting.current = false;
       setIsSubmitting(false);
     }
   };

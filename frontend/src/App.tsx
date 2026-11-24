@@ -39,20 +39,26 @@ import { ItemCardReportPage } from './pages/reports/ItemCardReportPage';
 import { DailySalesPage } from './pages/reports/daily-sales/DailySalesPage';
 import { AppSidebar } from './components/AppSidebar';
 import { usePosStore } from './stores/pos.store';
+import { offlinePosEngine, offlinePosPreviewEnabled } from './services/offline-pos.service';
 import { licensingApi, LicenseStatus } from './api/licensing';
 import { ActivationPage } from './pages/ActivationPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { getCurrentUser, getUserRole } from './utils/permissions';
+import { usePlatformBrand } from './hooks/usePlatformBrand';
+import { trackScreenNavigation, installGlobalAuditHeaders } from './utils/audit-tracker';
 
 // مكون التغليف الرئيسي الذي يعرض السايدبار مع الصفحات الإدارية ونقاط البيع
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = React.useState(false);
+  const { companyBrand } = usePlatformBrand();
 
   // إغلاق القائمة الجانبية تلقائياً على الجوال/التابلت عند الانتقال لصفحة جديدة
   useEffect(() => {
     setIsMobileSidebarOpen(false);
+    installGlobalAuditHeaders();
+    trackScreenNavigation(location.pathname);
   }, [location.pathname]);
 
   // اختصار عالمي لفتح شاشة البيع F4 من أي شاشة في النظام
@@ -81,8 +87,8 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           <span>القائمة</span>
         </button>
         <div className="flex items-center gap-2">
-          <span className="font-black text-sm tracking-wide">DawaCore ERP</span>
-          <img src="/logo.png" alt="Logo" className="w-7 h-7 rounded-lg object-cover border border-white/20" />
+          <span className="font-black text-sm tracking-wide">{companyBrand.displayName}</span>
+          <img src={companyBrand.logoUrl || '/logo.png'} alt="Logo" className="w-7 h-7 rounded-lg object-cover border border-white/20" />
         </div>
       </div>
 
@@ -142,23 +148,39 @@ const AppRoutes: React.FC = () => {
 
   const [licenseStatus, setLicenseStatus] = React.useState<LicenseStatus | null>(null);
   const [loadingLicense, setLoadingLicense] = React.useState(true);
+  const [licenseNetworkUnavailable, setLicenseNetworkUnavailable] = React.useState(false);
 
   React.useEffect(() => {
-    licensingApi
-      .getStatus()
-      .then((status) => {
+    let active = true;
+    let checkId = 0;
+    const checkLicense = async () => {
+      const requestId = ++checkId;
+      try {
+        const status = await licensingApi.getStatus();
+        if (!active || requestId !== checkId) return;
         setLicenseStatus(status);
-      })
-      .catch((err) => {
+        setLicenseNetworkUnavailable(false);
+        offlinePosEngine.rememberLicenseCheck(status);
+      } catch (error) {
+        if (!active || requestId !== checkId) return;
+        const networkError = error instanceof Error && !('response' in error && error.response);
+        setLicenseNetworkUnavailable(networkError);
+        if (networkError) offlinePosEngine.markNetworkUnavailable();
         setLicenseStatus({
           isActivated: false,
           hwid: 'تعذر الاتصال بالخادم',
-          error: 'يرجى التأكد من تشغيل خادم DawaCore Backend',
+          error: 'يرجى التأكد من تشغيل خادم MadarCore Backend',
         });
-      })
-      .finally(() => {
-        setLoadingLicense(false);
-      });
+      } finally {
+        if (active && requestId === checkId) setLoadingLicense(false);
+      }
+    };
+    void checkLicense();
+    window.addEventListener('online', checkLicense);
+    return () => {
+      active = false;
+      window.removeEventListener('online', checkLicense);
+    };
   }, []);
 
   if (loadingLicense) {
@@ -173,7 +195,12 @@ const AppRoutes: React.FC = () => {
   }
 
   // إذا لم يكن النظام مفعلاً على هذا الجهاز، حظر كل الشاشات وعرض شاشة التفعيل فقط
-  if (!licenseStatus?.isActivated) {
+  const userForOfflinePos = getCurrentUser();
+  const canOpenOfflinePos = offlinePosPreviewEnabled && licenseNetworkUnavailable &&
+    /^\/pos\/?$/.test(location.pathname) && !!userForOfflinePos?.branchId &&
+    offlinePosEngine.hasRecentLicenseCheck() &&
+    !!offlinePosEngine.getOfflineShift(userForOfflinePos.id, userForOfflinePos.branchId);
+  if (!licenseStatus?.isActivated && !canOpenOfflinePos) {
     return (
       <ActivationPage
         initialStatus={licenseStatus!}

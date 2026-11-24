@@ -1,8 +1,21 @@
 import { useEffect, useState } from 'react';
-import { getBusinessTerminology, getBusinessType } from '../utils/business-terminology';
+import { useAuthStore } from '../stores/auth.store';
+import {
+  getBusinessTerminology,
+  getBusinessType,
+  normalizeFrontendBusinessType,
+} from '../utils/business-terminology';
 
 export function useBusinessTerminology() {
-  const [type, setType] = useState(getBusinessType);
+  const authBusinessType = useAuthStore((s) => s.user?.businessType);
+  const [type, setType] = useState(() =>
+    authBusinessType ? normalizeFrontendBusinessType(authBusinessType) : getBusinessType(),
+  );
+
+  useEffect(() => {
+    setType(authBusinessType ? normalizeFrontendBusinessType(authBusinessType) : getBusinessType());
+  }, [authBusinessType]);
+
   useEffect(() => {
     const refresh = () => setType(getBusinessType());
     window.addEventListener('dawacore-business-type-changed', refresh);
@@ -13,5 +26,6 @@ export function useBusinessTerminology() {
       window.removeEventListener('storage', refresh);
     };
   }, []);
+
   return getBusinessTerminology(type);
 }

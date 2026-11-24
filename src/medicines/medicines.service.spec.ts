@@ -48,11 +48,14 @@ describe('MedicinesService - Unit Labels & Weighed Items', () => {
       findMany: jest.fn(),
       findUnique: jest.fn(),
     },
+    branch: {
+      findMany: jest.fn().mockResolvedValue([{ id: 'branch-1' }]),
+    },
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new MedicinesService(mockPrisma);
+    service = new MedicinesService(mockPrisma as any, { log: jest.fn(), findAll: jest.fn() } as any);
   });
 
   describe('getDefaultUnitLabel fallback logic', () => {
@@ -398,7 +401,7 @@ describe('MedicinesService - Unit Labels & Weighed Items', () => {
     });
 
     it('حفظ وتحديث الحد الأدنى في دالة update داخل المعاملة الذرية', async () => {
-      mockPrisma.medicine.findUnique.mockResolvedValue({
+      mockPrisma.medicine.findFirst.mockResolvedValue({
         id: 'med-update-1',
         isWeighed: false,
         barcode: '6229999999995',
@@ -470,22 +473,114 @@ describe('MedicinesService - Unit Labels & Weighed Items', () => {
 
       // 1. findForPos
       mockPrisma.medicine.findMany.mockResolvedValue([mockMed]);
-      const posResults = await service.findForPos('branch-1', 'فحص');
+      const posResults = await service.findForPos('branch-1', 'فحص', mockActor.companyId);
       expect(posResults[0].units[0].minSalePrice).toBe(42);
 
       // 2. search
-      const searchResults = await service.search('فحص', 'branch-1');
+      const searchResults = await service.search('فحص', 'branch-1', mockActor.companyId);
       expect(searchResults[0].units[0].minSalePrice).toBe(42);
 
       // 3. scan
       mockPrisma.medicine.findFirst.mockResolvedValue(mockMed);
-      const scanResult = await service.scan('6228888888888');
+      const scanResult = await service.scan('6228888888888', 'branch-1', mockActor.companyId);
       expect(scanResult.units[0].minSalePrice).toBe(42);
 
       // 4. findOne
-      mockPrisma.medicine.findUnique.mockResolvedValue(mockMed);
-      const findOneResult = await service.findOne('med-pos-test');
+      mockPrisma.medicine.findFirst.mockResolvedValue(mockMed);
+      const findOneResult = await service.findOne('med-pos-test', mockActor);
       expect(findOneResult.units[0].minSalePrice).toBe(42);
+    });
+  });
+
+  describe('company catalogue isolation', () => {
+    const actorA: any = { companyId: 'company-a', branchId: 'branch-a', role: 'COMPANY_ADMIN' };
+
+    it('always scopes catalogue lists to the authenticated company', async () => {
+      mockPrisma.medicine.findMany.mockResolvedValue([]);
+      mockPrisma.medicine.count.mockResolvedValue(0);
+
+      await service.findAll({ page: 1, limit: 20, branchId: 'branch-a' }, actorA);
+
+      expect(mockPrisma.medicine.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ companyId: 'company-a' }) }),
+      );
+      expect(mockPrisma.medicine.count).toHaveBeenCalledWith({
+        where: expect.objectContaining({ companyId: 'company-a' }),
+      });
+    });
+
+    it('checks duplicate barcodes inside the actor company and writes companyId from the actor', async () => {
+      mockPrisma.companySetting.findMany.mockResolvedValue([]);
+      mockPrisma.medicine.findFirst.mockResolvedValue(null);
+      mockPrisma.medicine.count.mockResolvedValue(0);
+      mockPrisma.medicine.create.mockImplementation(async ({ data }: any) => ({ id: 'med-a', ...data, units: [] }));
+
+      await service.create(
+        { tradeName: 'صنف أ', scientificName: 'علمي', barcode: 'SAME-001', category: 'عام' } as any,
+        actorA,
+      );
+
+      expect(mockPrisma.medicine.findFirst).toHaveBeenCalledWith({
+        where: { companyId: 'company-a', barcode: 'SAME-001' },
+      });
+      expect(mockPrisma.medicine.create.mock.calls[0][0].data.companyId).toBe('company-a');
+    });
+
+    it('returns not found when the requested id is not owned by the actor company', async () => {
+      mockPrisma.medicine.findFirst.mockResolvedValue(null);
+
+      await expect(service.findOne('foreign-med', actorA)).rejects.toThrow(MockNotFoundException);
+      expect(mockPrisma.medicine.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'foreign-med', companyId: 'company-a' } }),
+      );
+    });
+  });
+
+  describe('validateScientificName for CLOTHING activity', () => {
+    it('allows empty scientificName when company businessType is CLOTHING', async () => {
+      mockPrisma.companySetting.findMany.mockResolvedValue([
+        { key: 'businessType', value: 'CLOTHING' },
+      ]);
+      mockPrisma.medicine.findUnique.mockResolvedValue(null);
+      mockPrisma.medicine.count.mockResolvedValue(10);
+      mockPrisma.medicine.create.mockResolvedValue({
+        id: 'med-cloth-1',
+        tradeName: 'قميص رجالي قطن',
+        scientificName: '',
+        units: [],
+      });
+
+      const created = await service.create(
+        {
+          tradeName: 'قميص رجالي قطن',
+          scientificName: '',
+          barcode: '6229990001112',
+          category: 'ملابس رجالية',
+          units: [{ unitType: 'UNIT' as UnitType, multiplier: 1, price: 250, isDefault: true }],
+        } as any,
+        { companyId: 'comp-cloth' } as any,
+      );
+
+      expect(created.tradeName).toBe('قميص رجالي قطن');
+      expect(mockPrisma.medicine.create).toHaveBeenCalled();
+    });
+
+    it('rejects empty scientificName when company businessType is PHARMACY', async () => {
+      mockPrisma.companySetting.findMany.mockResolvedValue([
+        { key: 'businessType', value: 'PHARMACY' },
+      ]);
+
+      await expect(
+        service.create(
+          {
+            tradeName: 'بانادول إكسترا',
+            scientificName: '   ',
+            barcode: '6229990001113',
+            category: 'مسكنات',
+          } as any,
+          { companyId: 'comp-pharm' } as any,
+        ),
+      ).rejects.toThrow(MockBadRequestException);
     });
   });
 });

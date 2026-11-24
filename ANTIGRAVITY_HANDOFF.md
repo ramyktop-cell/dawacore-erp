@@ -1,32 +1,11 @@
-# رسائل التسليم
-
-تُملأ معرفات المهمة والمراجعة قبل استخدام أي رسالة. اقرأ AI_DEVELOPMENT_WORKFLOW.md وAGENTS.md أولاً.
-
-## من Codex إلى Antigravity — تنفيذ
+# ANTIGRAVITY_HANDOFF
 
 ```text
-نفذ المهمة <TASK_ID> وفق IMPLEMENTATION_PLAN.md، المراجعة <REVISION>، وحالتها PLAN_READY.
-اقرأ AGENTS.md والخطة والملفات المرتبطة. احفظ baseline قبل التعديل.
-عدّل الملفات المذكورة في Allowed files فقط. احفظ أي تعديلات سابقة للمستخدم.
-نفذ معايير القبول والاختبارات المحددة، ووثق الأوامر والنتائج والأدلة والفروق في IMPLEMENTATION_REPORT.md.
-إذا ظهر احتياج خارج الحدود، وثقه وأعده إلى Codex قبل توسيع العمل.
-عند الانتهاء ضع READY_FOR_REVIEW وتوقف عن التعديل. لا تصدر PASS أو تنشر خارج تفويض الخطة.
-```
+راجع REVIEW_REPORT.md وREPAIR_REQUEST.md الحاليين ونفّذ فقط R3-01..R3-04.
 
-## من Antigravity إلى Codex — مراجعة
+التسليم السابق مرفوض لأن FT-12 أعطى PASS كاذبًا: Phase-3 finally حذف .staging_runtime قبل Phase 4، والتقرير الفعلي كان deployment=IN_PROGRESS وhealth=NOT_STARTED والخطأ Staged runtime directory does not exist. أصلح عمر staging واجعل FT-12 يثبت FILES_SWAPPED وrollbackTriggerPhase=HEALTH واستعادة baseline الدقيقة وعدم بقاء staging/quarantine.
 
-```text
-المهمة <TASK_ID> جاهزة للمراجعة، وفق الخطة <REVISION>.
-IMPLEMENTATION_REPORT.md يتضمن الملفات والفروق والاختبارات والقيود.
-النسخة النهائية/البصمات: <LOCATION>، والنسخة المرجعية: <LOCATION>.
-توقف التنفيذ. راجع الفروق الفعلية ومعايير القبول، واكتب REVIEW_REPORT.md.
-```
+أزل المسار الثابت E:\NODS JS20.2 من build/test. استخدم -NodeExecutable اختياريًا أو PATH مع تحقق صارم، وشغّل npm من نفس toolchain. نظف git diff --check.
 
-## من Codex إلى Antigravity — إصلاح فقط
-
-```text
-راجع REPAIR_REQUEST.md للمهمة <TASK_ID>، دورة <CYCLE>، وحالتها CHANGES_REQUESTED.
-أصلح العيوب <ISSUE_IDS> فقط ضمن الملفات المسموحة في الطلب.
-احتفظ ببقية الوظائف والتعديلات. نفذ اختبارات الإصلاح والرجوع وحدّث IMPLEMENTATION_REPORT.md.
-عند الانتهاء ضع READY_FOR_REVIEW وتوقف عن التعديل ليعيد Codex المراجعة.
+شغّل FT-12 منفردًا أولًا وافحص التقرير المحفوظ. إذا لم يثبت post-swap health failure فتوقف ولا تشغل بقية الاختبارات. بعد نجاحه الحقيقي فقط: rebuild باستخدام Node مدعوم صراحة، Level A مرة، Level B مرة، تحديث التقرير، implementation commit ثم reporting commit، ثم توقف لمراجعة Codex. ممنوع Level C أو إرسال ZIP.
 ```
