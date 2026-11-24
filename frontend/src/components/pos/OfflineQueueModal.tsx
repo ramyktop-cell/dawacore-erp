@@ -4,7 +4,6 @@ import {
   Wifi,
   WifiOff,
   RefreshCw,
-  Trash2,
   Printer,
   CheckCircle2,
   AlertTriangle,
@@ -74,14 +73,6 @@ export const OfflineQueueModal: React.FC<OfflineQueueModalProps> = ({ isOpen, on
     setSyncMessage('جاري تحديث قاعدة بيانات الأصناف والباركود المحلية...');
     const count = await offlinePosEngine.refreshCatalogFromServer();
     setSyncMessage(`✅ تم حفظ (${count}) صنف وباركود في الذاكرة المحلية للعمل بدون إنترنت!`);
-  };
-
-  const handleDeleteSale = async (localId: string, invNo: string) => {
-    if (!window.confirm(`هل أنت متأكد من حذف الفاتورة المحلية (${invNo}) من طابور المزامنة؟`)) {
-      return;
-    }
-    await offlinePosEngine.removeQueuedSale(localId);
-    await loadQueue();
   };
 
   const handleReprintOfflineReceipt = (sale: OfflineQueuedSale) => {
@@ -277,13 +268,6 @@ export const OfflineQueueModal: React.FC<OfflineQueueModalProps> = ({ isOpen, on
                     <Printer className="w-4 h-4" />
                   </button>
 
-                  <button
-                    onClick={() => handleDeleteSale(sale.localId, sale.offlineInvoiceNumber)}
-                    className="p-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition cursor-pointer"
-                    title="حذف الفاتورة من الطابور"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
                 </div>
               </div>
             ))

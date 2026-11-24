@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { usePosStore, UnitType, CartItem } from '../stores/pos.store';
 import { usePosShortcuts } from '../hooks/usePosShortcuts';
@@ -9,7 +10,7 @@ import { CustomerFormModal } from '../components/customers/CustomerFormModal';
 import { CustomerPaymentModal } from '../components/customers/CustomerPaymentModal';
 import { ItemDiscountModal } from '../components/pos/ItemDiscountModal';
 import { OfflineQueueModal } from '../components/pos/OfflineQueueModal';
-import { offlinePosEngine, OfflineSyncSnapshot } from '../services/offline-pos.service';
+import { offlinePosEngine, offlinePosPreviewEnabled, OfflineSyncSnapshot } from '../services/offline-pos.service';
 import { ThermalPrinterService } from '../services/printer.service';
 import { getUnitLabel, getBusinessTerminology } from '../utils/business-terminology';
 import { parseScaleBarcode, scaleQuantity, saveScaleBarcodeSettings, hasScaleBarcodeSettings } from '../utils/scale-barcode';
@@ -434,6 +435,13 @@ export const PosPage: React.FC = () => {
 
   const debouncedInput = useDebounce(barcodeInput, 200);
 
+  useEffect(() => {
+    if (offlinePosPreviewEnabled && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/pos-offline-sw.js', { updateViaCache: 'none' })
+        .catch((error: unknown) => console.warn('POS offline shell registration failed:', error));
+    }
+  }, []);
+
   // الاشتراك في محرك الأوفلاين وتحميل دليل الأصناف المحلي وكروت الأصناف تلقائياً عند فتح شاشة الكاشير
   useEffect(() => {
     const unsub = offlinePosEngine.subscribe((snap) => {
@@ -558,18 +566,30 @@ export const PosPage: React.FC = () => {
 
         usePosStore.getState().initSession(bId, cId, 'OPEN_SHIFT');
         if (!bId || !cId) { setActiveShiftData(null); return; }
+        const loadSavedShift = () => {
+          const saved = offlinePosEngine.getOfflineShift(cId, bId);
+          if (saved) {
+            sId = saved.id;
+            setActiveShiftData(saved);
+          }
+        };
         try {
-          const res = await apiFetch(`/api/shifts/active?userId=${encodeURIComponent(cId)}&branchId=${encodeURIComponent(bId)}`);
-          if (res.ok) {
-            const shiftData = await res.json();
-            if (shiftData && shiftData.id) {
-              sId = shiftData.id;
-              if (shiftData.branchId) bId = shiftData.branchId;
-              setActiveShiftData(shiftData);
+          if (offlinePosEngine.isEffectivelyOffline()) {
+            loadSavedShift();
+          } else {
+            const res = await apiFetch(`/api/shifts/active?userId=${encodeURIComponent(cId)}&branchId=${encodeURIComponent(bId)}`);
+            if (res.ok) {
+              const shiftData = await res.json();
+              if (shiftData && shiftData.id) {
+                sId = shiftData.id;
+                if (shiftData.branchId) bId = shiftData.branchId;
+                setActiveShiftData(shiftData);
+              }
+              offlinePosEngine.rememberVerifiedShift(cId, bId, shiftData?.id ? shiftData : null);
             }
           }
         } catch {
-          // استخدام القيم الحالية
+          if (offlinePosEngine.isEffectivelyOffline()) loadSavedShift();
         }
 
         usePosStore.getState().initSession(bId, cId, sId);
